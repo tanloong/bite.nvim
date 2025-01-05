@@ -1,3 +1,47 @@
 img/
 tests/xdg/
 .vim
+
+# Byte-compiled / optimized / DLL files
+*__pycache__/
+*.ruff_cache/
+
+# packaging
+build/
+dist/
+*.egg-info
+
+# data
+libs/
+cache/
+
+# unit test / coverage report
+htmlcov/
+.coverage
+coverage.xml
+
+# mypy
+.mypy_cache/
+
+# miscellaneous
+.idea
+.vscode
+*.zip
+*.tar.gz
+*.parsed
+*.mp4
+*.matched
+*.ini
+doc
+note*
+test.py
+tmp
+examples/
+src/*.txt
+tests/*.java
+src/neosca_gui/data/stanza_resources
+data/stanza_resources
+*.DS_Store
+*._.
+corpus
+stanza_resources

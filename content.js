@@ -17,7 +17,7 @@ function handleInput(event) {
     containers.forEach(container => {
       let subsection = container.querySelector(".neeko-text")?.textContent.trim();
       let text = container.querySelector("textarea")?.textContent.trim();
-      if (subsection && text) {subsection_text[subsection] = text;}
+      if (subsection) {subsection_text[subsection] = text;}
     });
     data[label] = subsection_text
   }
