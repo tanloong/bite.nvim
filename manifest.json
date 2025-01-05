@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Text Box Sync",
+  "version": "1.0",
+  "description": "Sync text box content to Neovim",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "file:///*.html",
+    "http://127.0.0.1/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "file:///*.html"
+      ],
+      "js": [
+        "content.js"
+      ]
+    }
+  ]
+}
