@@ -1,6 +1,14 @@
+#!/usr/bin/env python3
+
 import json
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
+
+from pynvim import attach
+
+# 连接到 Neovim 实例
+nvim = attach("socket", path="/tmp/nvim.sock")  # 修改为你的 Neovim socket 路径
+buffer = nvim.current.buffer  # 获取当前 Buffer
 
 
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
@@ -24,7 +32,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 # SSE 数据格式：`data: <JSON 数据>\n\n`
                 self.wfile.write(f"data: {json_data}\n\n".encode())
                 self.wfile.flush()
-                time.sleep(3)  # 每隔 5 秒推送一次
+
         else:
             self.send_error(404, "Not Found")
 
@@ -52,6 +60,9 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         try:
             data = json.loads(post_data.decode("utf-8"))
             print("Received JSON data:", data["1"])
+
+            # 将数据写入 Neovim Buffer
+            buffer.append(f"POST: {json.dumps(data)}")
 
             # 返回响应（可选）
             response = {"status": "success", "received_data": data}
