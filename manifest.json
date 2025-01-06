@@ -10,11 +10,12 @@
   ],
   "host_permissions": [
     "file:///*.html",
-    "http://127.0.0.1/*"
+    "https://aidp.bytedance.com/operation/task-v2/*"
   ],
   "content_scripts": [
     {
       "matches": [
+        "https://aidp.bytedance.com/operation/task-v2/*",
         "file:///*.html"
       ],
       "js": [
