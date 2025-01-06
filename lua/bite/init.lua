@@ -255,10 +255,10 @@ _H.section2dict = function(n)
   return data
 end
 
-M.cmd.start_server = vim.fn["ByteStartServer"]
-M.cmd.stop_server = vim.fn["ByteStopServer"]
+M.cmd.start_server = vim.fn["BiteStartServer"]
+M.cmd.stop_server = vim.fn["BiteStopServer"]
 M.cmd.send_data = function(n)
-  vim.fn["ByteSendData"](_H.section2dict(n))
+  vim.fn["BiteSendData"](_H.section2dict(n))
 end
 
 vim.api.nvim_create_user_command("B", function(a)

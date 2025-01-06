@@ -92,7 +92,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
 
 @pynvim.plugin
-class Byte:
+class Bite:
     def __init__(self, nvim):
         self.nvim = nvim
         self.q = queue.Queue()
@@ -102,12 +102,7 @@ class Byte:
         self.receive_data_thread = None
         self.port = 9001
 
-        # https://pynvim.readthedocs.io/en/latest/usage/python-plugin-api.html#lua-integration
-        # self.nvim.exec_lua("_byte = require('byte')")
-        # self.mod = self.nvim.lua._byte
-        # self.mod.init()
-
-    @pynvim.function("ByteStartServer", sync=False)
+    @pynvim.function("BiteStartServer", sync=False)
     def start_server(self, *_):
         if self.httpd is not None:
             self.nvim.out_write("Server is already running\n")
@@ -129,7 +124,7 @@ class Byte:
         self.nvim.out_write("Server started on port 9001\n")
         self.nvim.command("hi StatusLine guibg='green' ctermbg=2")
 
-    @pynvim.function("ByteStopServer", sync=False)
+    @pynvim.function("BiteStopServer", sync=False)
     def do_stop_server(self, *_):
         if self.httpd is None:
             self.nvim.out_write("Server is not running\n")
@@ -145,7 +140,7 @@ class Byte:
 
         self.nvim.command("hi clear StatusLine")
 
-    @pynvim.function("ByteSendData", sync=False)
+    @pynvim.function("BiteSendData", sync=False)
     def do_send_data(self, data: dict):
         if self.httpd is None:
             self.nvim.out_write("Server is not running\n")
