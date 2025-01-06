@@ -12,6 +12,7 @@ import pynvim
 
 logging.basicConfig(format="%(message)s", filename="server.log", level=logging.INFO)
 
+
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, nvim, q, shutdown_flag, request, client_address, server):
         self.nvim = nvim
@@ -91,7 +92,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
 
 @pynvim.plugin
-class Bd:
+class Byte:
     def __init__(self, nvim):
         self.nvim = nvim
         self.q = queue.Queue()
@@ -101,12 +102,17 @@ class Bd:
         self.receive_data_thread = None
         self.port = 9001
 
-    @pynvim.command("BdStartServer", range="", sync=False)
-    def start_server(self, _):
+        # https://pynvim.readthedocs.io/en/latest/usage/python-plugin-api.html#lua-integration
+        # self.nvim.exec_lua("_byte = require('byte')")
+        # self.mod = self.nvim.lua._byte
+        # self.mod.init()
+
+    @pynvim.function("ByteStartServer", sync=False)
+    def start_server(self, *_):
         if self.httpd is not None:
             self.nvim.out_write("Server is already running\n")
             return
-        if not self.is_port_available(self.port):
+        if not self._is_port_available(self.port):
             self.nvim.out_write("Port 9001 is already in use\n")
             return
 
@@ -123,8 +129,8 @@ class Bd:
         self.nvim.out_write("Server started on port 9001\n")
         self.nvim.command("hi StatusLine guibg='green' ctermbg=2")
 
-    @pynvim.command("BdStopServer", range="", sync=False)
-    def stop_server(self, _):
+    @pynvim.function("ByteStopServer", sync=False)
+    def do_stop_server(self, *_):
         if self.httpd is None:
             self.nvim.out_write("Server is not running\n")
             return
@@ -139,7 +145,16 @@ class Bd:
 
         self.nvim.command("hi clear StatusLine")
 
-    def is_port_available(self, port: int):
+    @pynvim.function("ByteSendData", sync=False)
+    def do_send_data(self, data: dict):
+        if self.httpd is None:
+            self.nvim.out_write("Server is not running\n")
+            return
+
+        self.q.put(data)
+        self.nvim.out_write("Data sent to queue\n")
+
+    def _is_port_available(self, port: int):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
                 s.settimeout(1)
@@ -147,10 +162,3 @@ class Bd:
                 return False  # 端口被占用
             except OSError:
                 return True  # 端口未被占用
-
-    @pynvim.command("BdSendData", range="", sync=False)
-    def send_data(self, _):
-        # 模拟发送数据到队列
-        data = {"message": "这是服务器推送的消息", "timestamp": time.time()}
-        self.q.put(data)
-        self.nvim.out_write("Data sent to queue\n")

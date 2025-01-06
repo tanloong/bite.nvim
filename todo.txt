@@ -1,0 +1,20 @@
+Bd subcommands
+  start_server
+  stop_server
+  enable_keybindings
+  disable_keybindings
+  push
+    0 (editor2browser, all sections)
+    n (editor2browser, the n-th section, n > 0)
+    no-arg (editor2browser, current section)
+  pull
+    0 (browser2editor, all sections)
+    n (browser2editor, the n-th section, n > 0)
+    no-arg (browser2editor, current section)
+  diff
+    0 (diff editor and browser, all sections)
+    n (diff editor and browser, the n-th section, n > 0)
+    no-arg (diff editor and browser, current section)
+  play (the audio of current section)
+
+only enable the plugin if under ~/work/.../
