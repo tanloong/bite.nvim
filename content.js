@@ -74,6 +74,9 @@ button2.addEventListener('click', () => {
         case "put":
           editor2browser(data);
           break;
+        case "init_transcripts":
+          init_transcripts();
+          break;
         default:
           console.log('Unknown action:', data["action"]);
           break;
@@ -174,6 +177,17 @@ function toggle() {
 function back() {
   let btn = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.btns-play > svg:nth-child(2)")
   btn.dispatchEvent(clickEvent)
+}
+
+function init_transcripts() {
+  let root = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(3) > div")
+  var section, subsection, section_head, section_body, section_tail, label, containers, elem, btn
+  for (let i = 0; i < root.children.length; i++) {
+    section = root.children[i].children[0];
+    [section_head, section_body, section_tail] = section.children;
+    btn = section_body.querySelector("button")
+    btn.dispatchEvent(clickEvent)
+  }
 }
 
 function browser2editor(event) {

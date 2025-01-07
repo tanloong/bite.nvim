@@ -35,11 +35,6 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.close_sse.clear()
 
         while True:
-            # time.sleep(1)
-            #
-            # if self.q.empty():
-            #     continue
-
             data = self.q.get()
 
             if self.close_sse.is_set():

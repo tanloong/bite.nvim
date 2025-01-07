@@ -155,64 +155,6 @@ _H.store_orig_mapping = function(key, mode)
   end
 end
 
-M.config = {
-  keymaps = {
-    { "n", "<bar>", M.append_plain_sep, { buffer = true } },
-    { "n", "<c-bar>", M.append_switch_sep, { buffer = true } },
-    { "n", "<c-n>", M.new_section, { buffer = true } },
-    { "n", "{", M.prev_para, { buffer = true } },
-    { "n", "}", M.next_para, { buffer = true } },
-    { "n", "[[", M.prev_section, { buffer = true } },
-    { "n", "]]", M.next_section, { buffer = true } },
-    { "n", "<c-t>", M.diff_orig_smth, { buffer = true, desc = "Diff between en original and en smooth" } }
-  }
-}
-
-M.cmd.enable_keybindings = function()
-  if M._is_mappings_on then
-    vim.notify "Keybindings already on, nothing to do"
-    return
-  end
-  if M.config.keymaps == nil then return end
-
-  local mode, lhs, rhs, opts
-  for _, entry in ipairs(M.config.keymaps) do
-    mode, lhs, rhs, opts = unpack(entry)
-    _H.store_orig_mapping(lhs, mode)
-    vim.keymap.set(mode, lhs, rhs, opts)
-  end
-
-  vim.notify "Keybindings on"
-  M._is_mappings_on = true
-  _H.warn_invalid_sep(true)
-end
-
-M.cmd.disable_keybindings = function()
-  if not M._is_mappings_on then
-    vim.notify "Keybindings already off, nothing to do"
-    return
-  end
-
-  if M.config.keymaps ~= nil then
-    local mode, lhs, _
-    for _, entry in ipairs(M.config.keymaps) do
-      mode, lhs, _, _ = unpack(entry)
-      pcall(vim.api.nvim_buf_del_keymap, 0, mode, lhs)
-    end
-  end
-  for _, mapargs in ipairs(M._orig_mappings) do
-    if next(mapargs) ~= nil then
-      mapargs.buffer = true
-      vim.fn.mapset(mapargs)
-    end
-  end
-  vim.notify "Keybindings off"
-  M._is_mappings_on = false
-  M._orig_mappings = {}
-
-  _H.warn_invalid_sep(false)
-end
-
 ---@return string
 _H.get_curr_section = function()
   local section_lineno = vim.fn.search("^# ", "cbWn")
@@ -271,6 +213,71 @@ end
 ---Turns on/off interval audio.
 M.cmd.toggle = function() vim.fn["BiteSendData"] { action = "toggle" } end
 M.cmd.back = function() vim.fn["BiteSendData"] { action = "back" } end
+M.cmd.init_transcripts = function() vim.fn["BiteSendData"] { action = "init_transcripts" } end
+
+local opt = { buffer = true, nowait = true, noremap = true }
+M.config = {
+  keymaps = {
+    { "n", "<bar>", M.append_plain_sep, opt },
+    { "n", "<c-bar>", M.append_switch_sep, opt },
+    { "n", "<c-n>", M.new_section, opt },
+    { "n", "{", M.prev_para, opt },
+    { "n", "}", M.next_para, opt },
+    { "n", "[[", M.prev_section, opt },
+    { "n", "]]", M.next_section, opt },
+    { "n", "<c-t>", M.diff_orig_smth, opt },
+    { "n", "gp", M.cmd.play, opt },
+    { "n", "gP", M.cmd.toggle, opt },
+    { "n", "<left>", M.cmd.back, opt },
+    { "n", "gI", M.cmd.init_transcripts, opt },
+  }
+}
+
+M.cmd.enable_keybindings = function()
+  if M._is_mappings_on then
+    vim.notify "Keybindings already on, nothing to do"
+    return
+  end
+  if M.config.keymaps == nil then return end
+
+  local mode, lhs, rhs, opts
+  for _, entry in ipairs(M.config.keymaps) do
+    mode, lhs, rhs, opts = unpack(entry)
+    _H.store_orig_mapping(lhs, mode)
+    vim.keymap.set(mode, lhs, rhs, opts)
+  end
+
+  vim.notify "Keybindings on"
+  M._is_mappings_on = true
+  _H.warn_invalid_sep(true)
+end
+
+M.cmd.disable_keybindings = function()
+  if not M._is_mappings_on then
+    vim.notify "Keybindings already off, nothing to do"
+    return
+  end
+
+  if M.config.keymaps ~= nil then
+    local mode, lhs, _
+    for _, entry in ipairs(M.config.keymaps) do
+      mode, lhs, _, _ = unpack(entry)
+      pcall(vim.api.nvim_buf_del_keymap, 0, mode, lhs)
+    end
+  end
+  for _, mapargs in ipairs(M._orig_mappings) do
+    if next(mapargs) ~= nil then
+      mapargs.buffer = true
+      vim.fn.mapset(mapargs)
+    end
+  end
+  vim.notify "Keybindings off"
+  M._is_mappings_on = false
+  M._orig_mappings = {}
+
+  _H.warn_invalid_sep(false)
+end
+
 
 vim.api.nvim_create_user_command("B", function(a)
   ---@type string[]
