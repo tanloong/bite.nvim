@@ -6,7 +6,7 @@ import queue
 import socket
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pynvim
 
@@ -14,10 +14,10 @@ logging.basicConfig(format="%(message)s", filename="server.log", level=logging.I
 
 
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
-    def __init__(self, nvim, q, shutdown_flag, request, client_address, server):
+    def __init__(self, nvim, q: queue.Queue, close_sse, request, client_address, server):
         self.nvim = nvim
         self.q = q
-        self.shutdown_flag = shutdown_flag
+        self.close_sse = close_sse
         super().__init__(request, client_address, server)
 
     def do_GET(self):
@@ -32,20 +32,28 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")  # 允许所有域
         self.end_headers()
 
+        self.close_sse.clear()
+
         while True:
-            time.sleep(1)
-
-            if self.shutdown_flag.is_set():
-                self.send_error(503, "Service Unavailable")
-                return
-
-            if self.q.empty():
-                continue
+            # time.sleep(1)
+            #
+            # if self.q.empty():
+            #     continue
 
             data = self.q.get()
+
+            if self.close_sse.is_set():
+                self.q.put(data)
+                return
+
             json_data = json.dumps(data, ensure_ascii=False)
-            self.wfile.write(f"data: {json_data}\n\n".encode())
-            self.wfile.flush()
+            try:
+                self.wfile.write(f"data: {json_data}\n\n".encode())
+            except (BrokenPipeError, ConnectionResetError) as ex:
+                # 客户端已关闭连接
+                logging.info("警告: 客户端已断开连接" + str(ex))
+                self.q.put(data)
+                return  # 退出函数，处理下一个请求
 
     def do_OPTIONS(self):
         # 处理预检请求
@@ -62,33 +70,37 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")  # 允许所有域
         self.end_headers()
 
+        if self.path == "/close-sse":
+            self.close_sse.set()
+            self.wfile.write(json.dumps({"status": "ok", "msg": "已收到关闭 SSE 请求"}).encode("utf-8"))
+            return
+
+        content_length = int(self.headers["Content-Length"])
+        post_data = self.rfile.read(content_length)
         try:
-            content_length = int(self.headers["Content-Length"])
-            post_data = self.rfile.read(content_length)
             data = json.loads(post_data.decode("utf-8"))
-            subsections = (
-                "人工英文转写结果",
-                "人工英文断句结果",
-                "人工同传中文结果",
-                "人工同传中文断句结果",
-                "人工英文顺滑结果",
-                "人工英文顺滑断句结果",
-            )
-            subsection_lines = []
-            for k in sorted(data.keys(), key=lambda s: int(s)):
-                subsection_lines.append("# " + k)
-                subsection_lines.append("")
-                for subsection in subsections:
-                    subsection_lines.append("## " + subsection)
-                    subsection_lines.append("")
-                    subsection_lines.append(data[k][subsection])
-                    subsection_lines.append("")
-            self.nvim.async_call(lambda: self.nvim.current.buffer.append(subsection_lines))
-            response = {"status": "success"}
-            self.wfile.write(json.dumps(response).encode("utf-8"))
         except json.JSONDecodeError:
-            print("Invalid JSON received")
             self.send_error(400, "Invalid JSON")
+            return
+        subsections = (
+            "人工英文转写结果",
+            "人工英文断句结果",
+            "人工同传中文结果",
+            "人工同传中文断句结果",
+            "人工英文顺滑结果",
+            "人工英文顺滑断句结果",
+        )
+        subsection_lines = []
+        for k in sorted(data.keys(), key=lambda s: int(s)):
+            subsection_lines.append("# " + k)
+            subsection_lines.append("")
+            for subsection in subsections:
+                subsection_lines.append("## " + subsection)
+                subsection_lines.append("")
+                subsection_lines.append(data[k][subsection])
+                subsection_lines.append("")
+        self.nvim.async_call(lambda: self.nvim.current.buffer.append(subsection_lines))
+        self.wfile.write(json.dumps({"status": "ok", "msg": "已收到数据"}).encode("utf-8"))
 
 
 @pynvim.plugin
@@ -96,7 +108,7 @@ class Bite:
     def __init__(self, nvim):
         self.nvim = nvim
         self.q = queue.Queue()
-        self.shutdown_flag = threading.Event()
+        self.close_sse = threading.Event()
         self.httpd = None
         self.server_thread = None
         self.receive_data_thread = None
@@ -111,10 +123,10 @@ class Bite:
             self.nvim.out_write("Port 9001 is already in use\n")
             return
 
-        self.shutdown_flag.clear()
+        self.close_sse.clear()
 
-        self.httpd = HTTPServer(
-            ("", self.port), lambda *args: SimpleHTTPRequestHandler(self.nvim, self.q, self.shutdown_flag, *args)
+        self.httpd = ThreadingHTTPServer(
+            ("", self.port), lambda *args: SimpleHTTPRequestHandler(self.nvim, self.q, self.close_sse, *args)
         )
 
         # 启动服务器线程
@@ -131,7 +143,7 @@ class Bite:
             return
 
         # 关闭服务器
-        self.shutdown_flag.set()
+        self.close_sse.set()
         self.httpd.shutdown()
         self.httpd.server_close()
         self.httpd = None

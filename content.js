@@ -48,13 +48,36 @@ button2.addEventListener('click', () => {
     button2.textContent = 'Listen Editor';
     button2.style.backgroundColor = '#007bff';
     console.log('SSE connection closed.');
+    fetch('http://127.0.0.1:9001/close-sse', {
+      method: 'POST'
+    }).then(function (res) {
+      console.log(res);
+    })
   } else {
     // 如果未监听，建立 SSE 连接
     eventSource = new EventSource('http://127.0.0.1:9001/sse');
 
     // 监听服务器推送的消息
     eventSource.onmessage = function (event) {
+      console.log(event.data);
       let data = JSON.parse(event.data)[0]
+      switch (data["action"]) {
+        case "play":
+          play(data);
+          break;
+        case "toggle":
+          toggle();
+          break;
+        case "back":
+          back();
+          break;
+        case "put":
+          editor2browser(data);
+          break;
+        default:
+          console.log('Unknown action:', data["action"]);
+          break;
+      };
       editor2browser(data);
     }
 
@@ -76,8 +99,7 @@ button2.addEventListener('click', () => {
   }
 });
 
-window.addEventListener('beforeunload', () => {eventSource.close();});
-
+window.addEventListener('beforeunload', () => {if (eventSource) eventSource.close();});
 
 // 悬停效果
 button1.addEventListener('mouseenter', () => {
@@ -94,15 +116,20 @@ document.body.appendChild(button2);
 // 绑定点击事件
 button1.addEventListener('click', browser2editor);
 
+const inputEvent = new Event('input', {
+  bubbles: true,    // 事件是否冒泡
+  cancelable: true  // 事件是否可以取消
+});
+const clickEvent = new Event('click', {
+  bubbles: true,    // 事件是否冒泡
+  cancelable: true  // 事件是否可以取消
+});
+
+
 function editor2browser(data) {
   let root = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(3) > div")
   var section, subsection, section_head, section_body, section_tail, label, containers, elem
   // 创建一个 input 事件
-  const inputEvent = new Event('input', {
-    bubbles: true,    // 事件是否冒泡
-    cancelable: true  // 事件是否可以取消
-  });
-
   for (let i = 0; i < root.children.length; i++) {
     section = root.children[i].children[0];
     [section_head, section_body, section_tail] = section.children;
@@ -123,6 +150,30 @@ function editor2browser(data) {
       });
     }
   };
+}
+
+function play(data) {
+  let root = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(3) > div")
+  var section, subsection, section_head, section_body, section_tail, label, containers, elem
+  for (let i = 0; i < root.children.length; i++) {
+    section = root.children[i].children[0];
+    [section_head, section_body, section_tail] = section.children;
+    label = section_head.querySelector('span').textContent.trim();
+    if (label === data["section"]) {
+      section_head.querySelector("button").dispatchEvent(clickEvent)
+      break;
+    }
+  }
+}
+
+function toggle() {
+  let btn = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.btns-play > svg:nth-child(4)")
+  btn.dispatchEvent(clickEvent)
+}
+
+function back() {
+  let btn = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.btns-play > svg:nth-child(2)")
+  btn.dispatchEvent(clickEvent)
 }
 
 function browser2editor(event) {

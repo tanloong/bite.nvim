@@ -51,12 +51,9 @@ M.new_section = function()
 end
 
 M.prev_para = function()
-  vim.fn.search("^## ", "bW")
-  vim.fn.search("^## ", "bW")
-  vim.fn.search("^[^#]", "W")
+  vim.fn.search("^[^#]", "bW")
 end
 M.next_para = function()
-  vim.fn.search("^## ", "W")
   vim.fn.search("^[^#]", "W")
 end
 M.prev_section = function()
@@ -216,14 +213,17 @@ M.cmd.disable_keybindings = function()
   _H.warn_invalid_sep(false)
 end
 
+---@return string
+_H.get_curr_section = function()
+  local section_lineno = vim.fn.search("^# ", "cbWn")
+  return vim.fn.getline(section_lineno):match "^# (%d+)"
+end
+
 ---Converts the n-th section to into dict. Converts all sections if n <= 0 or n > last_section.
 ---@param n string
 _H.section2dict = function(n)
   ---@type string
-  if n == nil then
-    local section_lineno = vim.fn.search("^# ", "bWn")
-    n = vim.fn.getline(section_lineno):match "^# (%d+)"
-  end
+  if n == nil then n = _H.get_curr_section() end
 
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   local data = {}
@@ -257,9 +257,20 @@ end
 
 M.cmd.start_server = vim.fn["BiteStartServer"]
 M.cmd.stop_server = vim.fn["BiteStopServer"]
-M.cmd.send_data = function(n)
-  vim.fn["BiteSendData"](_H.section2dict(n))
+M.cmd.put = function(n)
+  local data = _H.section2dict(n)
+  data.action = "put"
+  vim.fn["BiteSendData"](data)
 end
+---Plays audio of the n-th section. The JS end does nothing if n is invalid.
+---@param n string
+M.cmd.play = function(n)
+  if n == nil then n = _H.get_curr_section() end
+  vim.fn["BiteSendData"] { action = "play", section = n }
+end
+---Turns on/off interval audio.
+M.cmd.toggle = function() vim.fn["BiteSendData"] { action = "toggle" } end
+M.cmd.back = function() vim.fn["BiteSendData"] { action = "back" } end
 
 vim.api.nvim_create_user_command("B", function(a)
   ---@type string[]
