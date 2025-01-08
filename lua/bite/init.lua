@@ -50,10 +50,12 @@ M.new_section = function()
   vim.fn.cursor(#lines + 4, 1)
 end
 
-M.prev_para = function()
+M.prev_subsection = function()
+  vim.fn.search("^## ", "bW")
   vim.fn.search("^[^#]", "bW")
 end
-M.next_para = function()
+M.next_subsection = function()
+  vim.fn.search("^## ", "W")
   vim.fn.search("^[^#]", "W")
 end
 M.prev_section = function()
@@ -187,7 +189,11 @@ _H.section2dict = function(n)
         break -- continue
       end
 
-      data[section][subsection] = line
+      if data[section][subsection] == "" then
+        data[section][subsection] = line
+      else
+        data[section][subsection] = data[section][subsection] .. (subsection:match "英文" and " " or "") .. line
+      end
     until true
   end
 
@@ -221,8 +227,8 @@ M.config = {
     { "n", "<bar>", M.append_plain_sep, opt },
     { "n", "<c-bar>", M.append_switch_sep, opt },
     { "n", "<c-n>", M.new_section, opt },
-    { "n", "{", M.prev_para, opt },
-    { "n", "}", M.next_para, opt },
+    { "n", "{", M.prev_subsection, opt },
+    { "n", "}", M.next_subsection, opt },
     { "n", "[[", M.prev_section, opt },
     { "n", "]]", M.next_section, opt },
     { "n", "<c-t>", M.diff_orig_smth, opt },
@@ -230,6 +236,7 @@ M.config = {
     { "n", "gP", M.cmd.toggle, opt },
     { "n", "<left>", M.cmd.back, opt },
     { "n", "gI", M.cmd.init_transcripts, opt },
+    { "n", "gr", vim.fn["BiteToggleServer"], opt },
   }
 }
 

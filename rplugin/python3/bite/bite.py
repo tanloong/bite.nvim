@@ -5,24 +5,31 @@ import logging
 import queue
 import socket
 import threading
-import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pynvim
 
-logging.basicConfig(format="%(message)s", filename="server.log", level=logging.INFO)
+from .consts import LOG_PATH
+
+logging.basicConfig(
+    format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d] pid:%(process)d tid:%(thread)d %(message)s",
+    datefmt="%H:%M:%S",
+    filename=LOG_PATH,
+    level=logging.INFO,
+)
 
 
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
-    def __init__(self, nvim, q: queue.Queue, close_sse, request, client_address, server):
+    def __init__(self, nvim, q: queue.Queue, request, client_address, server):
         self.nvim = nvim
         self.q = q
-        self.close_sse = close_sse
         super().__init__(request, client_address, server)
 
     def do_GET(self):
+        logging.info("do_GET requested")
         if self.path != "/sse":
             self.send_error(404, "Not Found")
+            logging.warning("Invalid path: %s", self.path)
 
         # 设置 SSE 相关的头
         self.send_response(200)
@@ -32,23 +39,19 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")  # 允许所有域
         self.end_headers()
 
-        self.close_sse.clear()
-
         while True:
             data = self.q.get()
-
-            if self.close_sse.is_set():
-                self.q.put(data)
+            if data is None:
+                logging.info("从队列中读取到 None，退出当前 do_GET")
                 return
 
             json_data = json.dumps(data, ensure_ascii=False)
             try:
                 self.wfile.write(f"data: {json_data}\n\n".encode())
             except (BrokenPipeError, ConnectionResetError) as ex:
-                # 客户端已关闭连接
                 logging.info("警告: 客户端已断开连接" + str(ex))
                 self.q.put(data)
-                return  # 退出函数，处理下一个请求
+                return
 
     def do_OPTIONS(self):
         # 处理预检请求
@@ -66,7 +69,8 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
         if self.path == "/close-sse":
-            self.close_sse.set()
+            self.q.put(None)
+            logging.info("收到关闭 SSE 请求，向队列中放入 None")
             self.wfile.write(json.dumps({"status": "ok", "msg": "已收到关闭 SSE 请求"}).encode("utf-8"))
             return
 
@@ -103,7 +107,6 @@ class Bite:
     def __init__(self, nvim):
         self.nvim = nvim
         self.q = queue.Queue()
-        self.close_sse = threading.Event()
         self.httpd = None
         self.server_thread = None
         self.receive_data_thread = None
@@ -113,32 +116,36 @@ class Bite:
     def start_server(self, *_):
         if self.httpd is not None:
             self.nvim.out_write("Server is already running\n")
+            logging.info("Server is already running")
             return
         if not self._is_port_available(self.port):
             self.nvim.out_write("Port 9001 is already in use\n")
+            logging.info("Port 9001 is already in use")
             return
 
-        self.close_sse.clear()
 
         self.httpd = ThreadingHTTPServer(
-            ("", self.port), lambda *args: SimpleHTTPRequestHandler(self.nvim, self.q, self.close_sse, *args)
+            ("", self.port), lambda *args: SimpleHTTPRequestHandler(self.nvim, self.q, *args)
         )
 
         # 启动服务器线程
         self.server_thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self.server_thread.start()
 
-        self.nvim.out_write("Server started on port 9001\n")
         self.nvim.command("hi StatusLine guibg='green' ctermbg=2")
+        self.nvim.out_write("Server started on port 9001\n")
+        logging.info("Server started on port 9001")
 
     @pynvim.function("BiteStopServer", sync=False)
-    def do_stop_server(self, *_):
+    def stop_server(self, *_):
         if self.httpd is None:
             self.nvim.out_write("Server is not running\n")
+            logging.info("Want to stop server but it is not running")
             return
 
         # 关闭服务器
-        self.close_sse.set()
+        self.q.put(None)  # tell thread http server to exit current while loop in do_GET
+        logging.info("向队列中放入None来告诉服务器退出当前do_GET")
         self.httpd.shutdown()
         self.httpd.server_close()
         self.httpd = None
@@ -146,15 +153,24 @@ class Bite:
         self.server_thread = None
 
         self.nvim.command("hi clear StatusLine")
+        self.nvim.out_write("Server stopped\n")
+        logging.info("Server stopped")
+
+    @pynvim.function("BiteToggleServer", sync=False)
+    def do_toggle_server(self, *_):
+        if self.httpd is None:
+            self.start_server()
+        else:
+            self.stop_server()
 
     @pynvim.function("BiteSendData", sync=False)
     def do_send_data(self, data: dict):
         if self.httpd is None:
             self.nvim.out_write("Server is not running\n")
+            logging.info("Want to send data but server is not running")
             return
 
         self.q.put(data)
-        self.nvim.out_write("Data sent to queue\n")
 
     def _is_port_available(self, port: int):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

@@ -156,6 +156,17 @@ function editor2browser(data) {
 }
 
 function play(data) {
+  //let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
+  //let region = wave.querySelector(`region[data-id="${data['section']}"]`);
+  //console.log(region);
+  //region.dispatchEvent(clickEvent);
+  //let btns = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.btns-play")
+  //let btn = btns.querySelector("[id^='play-slice_svg']")
+  //if (btn === null) {
+  //  btn = btns.querySelector("svg:nth-child(4)")
+  //}
+  //btn.dispatchEvent(clickEvent);
+
   let root = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(3) > div")
   var section, subsection, section_head, section_body, section_tail, label, containers, elem
   for (let i = 0; i < root.children.length; i++) {
@@ -163,7 +174,7 @@ function play(data) {
     [section_head, section_body, section_tail] = section.children;
     label = section_head.querySelector('span').textContent.trim();
     if (label === data["section"]) {
-      section_head.querySelector("button").dispatchEvent(clickEvent)
+      section_head.querySelector("button").dispatchEvent(clickEvent);
       break;
     }
   }
@@ -202,8 +213,8 @@ function browser2editor(event) {
     containers = section_body.querySelectorAll(".neeko-container");
     var subsection_text = {};
     // containers.forEach(c => {console.log(c.querySelectorAll(".neeko-text").length)}) 返回
-    // 3个12 (抛弃 3 个只读文本框，模型识别文本、模型识别文本和顺滑、模型预翻译文本) 
-    // 6个2 (这 6 个才是我们想要的)
+    // 3个12 (抛弃 3 个只读文本框，模型识别文本、模型识别文本和顺滑、模型预翻译文本)
+    // 6个2 (这 6 个才是需要的)
     // 2个0
     containers.forEach(container => {
       if (container.querySelectorAll(".neeko-text").length !== 2) {return;}
@@ -229,3 +240,4 @@ function browser2editor(event) {
     console.log(res);
   })
 }
+
