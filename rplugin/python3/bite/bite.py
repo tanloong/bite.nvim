@@ -5,7 +5,7 @@ import logging
 import queue
 import socket
 import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import pynvim
 
@@ -19,7 +19,7 @@ logging.basicConfig(
 )
 
 
-class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+class Server(SimpleHTTPRequestHandler):
     def __init__(self, nvim, q: queue.Queue, request, client_address, server):
         self.nvim = nvim
         self.q = q
@@ -41,8 +41,10 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
         while True:
             data = self.q.get()
+
             if data is None:
                 logging.info("从队列中读取到 None，退出当前 do_GET")
+                self.wfile.write(b"data: [{\"action\": \"close_sse\"}]\n\n")
                 return
 
             json_data = json.dumps(data, ensure_ascii=False)
@@ -107,67 +109,63 @@ class Bite:
     def __init__(self, nvim):
         self.nvim = nvim
         self.q = queue.Queue()
-        self.httpd = None
-        self.server_thread = None
-        self.receive_data_thread = None
+        self.httpd_server = None
+        self.thread_server = None
         self.port = 9001
 
     @pynvim.function("BiteStartServer", sync=False)
     def start_server(self, *_):
-        if self.httpd is not None:
-            self.nvim.out_write("Server is already running\n")
-            logging.info("Server is already running")
+        if self.httpd_server is not None:
+            self.nvim.out_write("启动失败，服务已运行\n")
+            logging.info("启动失败，服务已运行")
             return
         if not self._is_port_available(self.port):
-            self.nvim.out_write("Port 9001 is already in use\n")
-            logging.info("Port 9001 is already in use")
+            self.nvim.out_write(f"{self.port} 端口被占用")
+            logging.info("%s 端口被占用", self.port)
             return
 
+        self.httpd_server = ThreadingHTTPServer(("", self.port), lambda *args: Server(self.nvim, self.q, *args))
 
-        self.httpd = ThreadingHTTPServer(
-            ("", self.port), lambda *args: SimpleHTTPRequestHandler(self.nvim, self.q, *args)
-        )
+        self.thread_server = threading.Thread(target=self.httpd_server.serve_forever, daemon=True)
+        self.thread_server.start()
 
-        # 启动服务器线程
-        self.server_thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
-        self.server_thread.start()
+        self.nvim.out_write(f"服务已启动，端口 {self.port}\n")
+        logging.info("服务已启动，端口 %s", self.port)
 
         self.nvim.command("hi StatusLine guibg='green' ctermbg=2")
-        self.nvim.out_write("Server started on port 9001\n")
-        logging.info("Server started on port 9001")
 
     @pynvim.function("BiteStopServer", sync=False)
     def stop_server(self, *_):
-        if self.httpd is None:
-            self.nvim.out_write("Server is not running\n")
-            logging.info("Want to stop server but it is not running")
+        if self.httpd_server is None:
+            self.nvim.out_write("关闭服务失败，服务未运行\n")
+            logging.info("关闭服务失败，服务未运行")
             return
 
-        # 关闭服务器
         self.q.put(None)  # tell thread http server to exit current while loop in do_GET
         logging.info("向队列中放入None来告诉服务器退出当前do_GET")
-        self.httpd.shutdown()
-        self.httpd.server_close()
-        self.httpd = None
-        self.server_thread.join()  # 等待线程结束
-        self.server_thread = None
+        self.httpd_server.shutdown()
+        self.httpd_server.server_close()
+        self.httpd_server = None
+        self.thread_server.join()  # 等待线程结束
+        self.thread_server = None
+
+        self.nvim.out_write("服务已停止\n")
+        logging.info("服务已停止")
 
         self.nvim.command("hi clear StatusLine")
-        self.nvim.out_write("Server stopped\n")
-        logging.info("Server stopped")
 
     @pynvim.function("BiteToggleServer", sync=False)
     def do_toggle_server(self, *_):
-        if self.httpd is None:
+        if self.httpd_server is None:
             self.start_server()
         else:
             self.stop_server()
 
     @pynvim.function("BiteSendData", sync=False)
-    def do_send_data(self, data: dict):
-        if self.httpd is None:
-            self.nvim.out_write("Server is not running\n")
-            logging.info("Want to send data but server is not running")
+    def send_data(self, data: dict):
+        if self.httpd_server is None:
+            self.nvim.out_write("数据发送失败，服务未在运行\n")
+            logging.info("数据发送失败，服务未在运行")
             return
 
         self.q.put(data)

@@ -36,23 +36,32 @@ button2.style.zIndex = '1000'; // 确保按钮在最上层
 let eventSource = null;
 let isListening = false;
 
+function close_sse() {
+  eventSource.close();
+  eventSource = null;
+  isListening = false;
+  button2.textContent = 'Listen Editor';
+  button2.style.backgroundColor = '#007bff';
+
+  console.log('SSE connection closed.');
+}
+
+function notify_server_to_end_sse_session() {
+  fetch('http://127.0.0.1:9001/close-sse', {
+    method: 'POST'
+  }).then(function (res) {
+    console.log(res);
+  })
+}
+
 // 切换 SSE 连接
 button2.addEventListener('click', () => {
   if (isListening) {
     // 如果正在监听，关闭 SSE 连接
     if (eventSource) {
-      eventSource.close();
-      eventSource = null;
+      close_sse();
+      notify_server_to_end_sse_session()
     }
-    isListening = false;
-    button2.textContent = 'Listen Editor';
-    button2.style.backgroundColor = '#007bff';
-    console.log('SSE connection closed.');
-    fetch('http://127.0.0.1:9001/close-sse', {
-      method: 'POST'
-    }).then(function (res) {
-      console.log(res);
-    })
   } else {
     // 如果未监听，建立 SSE 连接
     eventSource = new EventSource('http://127.0.0.1:9001/sse');
@@ -77,6 +86,9 @@ button2.addEventListener('click', () => {
         case "init_transcripts":
           init_transcripts();
           break;
+        case "close_sse":
+          close_sse();
+          break;
         default:
           console.log('Unknown action:', data["action"]);
           break;
@@ -88,11 +100,7 @@ button2.addEventListener('click', () => {
     eventSource.onerror = function (error) {
       console.error('EventSource failed:', error);
       // 发生错误时关闭连接
-      eventSource.close();
-      eventSource = null;
-      isListening = false;
-      button2.textContent = 'Listen Editor';
-      button2.style.backgroundColor = '#007bff';
+      close_sse();
     };
 
     isListening = true;
@@ -232,9 +240,7 @@ function browser2editor(event) {
   }
   const response = fetch('http://127.0.0.1:9001', {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: {"Content-Type": "application/json"},
     body: JSON.stringify(data)
   }).then(function (res) {
     console.log(res);
