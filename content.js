@@ -317,7 +317,7 @@ function push_slice(data) {
       section_edge_pos1[section]["end"] === section_edge_pos2[section]["end"]
     ) {ok = true; break;}
   }
-  if (!ok) {nvim_log("设置边界失败，原位置时间比已变更，请重新设置"); fetch_slice(); return;}
+  if (!ok) {nvim_log("设置边界失败，原位置时间比已变更，请重新设置", "ERROR"); fetch_slice(); return;}
 
   let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
   let region = wave.querySelector(`region[data-id="${section}"]`);
@@ -348,7 +348,7 @@ function speed(data) {
     combobox.dispatchEvent(clickEvent);
     popup = document.querySelector("#arco-select-popup-0 > div > div")
   }
-  if (popup === null) {nvim_log("倍速失败，找不到下拉菜单"); return };
+  if (popup === null) {nvim_log("倍速失败，找不到下拉菜单", "ERROR"); return };
 
   let choices = popup.querySelectorAll("li")
   for (let i = 1; i <= choices.length; i++) {
@@ -357,9 +357,9 @@ function speed(data) {
       break;
     }
   }
-  if (after === null) {nvim_log("倍速失败，找不到当前速度"); return };
-  if (after < 1) {nvim_log(`倍速失败，${before}已最小`); return };
-  if (after > choices.length) {nvim_log(`倍速失败，${before}已最大`); return };
+  if (after === null) {nvim_log("倍速失败，找不到当前速度", "ERROR"); return };
+  if (after < 1) {nvim_log(`倍速失败，${before}已最小`, "ERROR"); return };
+  if (after > choices.length) {nvim_log(`倍速失败，${before}已最大`, "ERROR"); return };
 
   // 点击目标倍速，通知 nvim
   let li = popup.querySelector(`li:nth-child(${after})`)

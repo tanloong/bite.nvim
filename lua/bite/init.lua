@@ -169,7 +169,7 @@ end
 
 ---Converts the n-th section to into dict. Converts all sections if n <= 0 or n > last_section.
 ---@param n string|nil
-_H.section2dict = function(n)
+_H.buf2dict = function(n)
   if n == nil then
     n = _H.get_curr_section_nr()
     if n == nil then return end
@@ -259,7 +259,7 @@ end
 M.cmd.start_server = vim.fn["BiteStartServer"]
 M.cmd.stop_server = vim.fn["BiteStopServer"]
 M.cmd.put = function(n)
-  local data = _H.section2dict(n)
+  local data = _H.buf2dict(n)
   data.action = "put"
   vim.fn["BiteSendData"](data)
 end
@@ -342,7 +342,7 @@ end
 
 ---@param data table
 _H.receive_slice = function(data)
-  local section_subsection_line = _H.section2dict "0"
+  local section_subsection_line = _H.buf2dict "0"
   local new = vim.tbl_deep_extend("force", section_subsection_line, data)
   _H.dict2section(new)
 end
@@ -390,6 +390,8 @@ M.config = {
     { "n", "<leader><enter>", M.cmd.fetch_slice, opt },
     { "n", "<up>", function() M.cmd.speed(1) end, opt },
     { "n", "<down>", function() M.cmd.speed(-1) end, opt },
+    { "n", "[b", function() vim.fn.search([[【\?｜】\?]], "b") end, opt },
+    { "n", "]b", function() vim.fn.search([[【\?｜】\?]]) end, opt },
   }
 }
 
