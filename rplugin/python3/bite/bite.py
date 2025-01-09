@@ -109,7 +109,7 @@ class Server(SimpleHTTPRequestHandler):
         self.nvim.async_call(lambda: self.mod._H.receive_progress(data))
         self.wfile.write(json.dumps({"status": "ok", "msg": "fetch_progress已收到"}).encode("utf-8"))
 
-    def _nvim_log(self):
+    def _log(self):
         data = self._parse_data()
         if data is None:
             self.send_error(400, "Invalid JSON")
@@ -125,17 +125,8 @@ class Server(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")  # 允许所有域
         self.end_headers()
 
-        if self.path == "/close_sse":
-            self._close_sse()
-        elif self.path == "/fetch_slice":
-            self._fetch_slice()
-        elif self.path == "/fetch_content":
-            self._fetch_content()
-        elif self.path == "/fetch_progress":
-            self._fetch_progress()
-        elif self.path == "/log":
-            self._nvim_log()
-
+        if (func := getattr(self, "_" + self.path.lstrip("/")), None) is not None:
+            func()
 
 @pynvim.plugin
 class Bite:

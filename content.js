@@ -39,8 +39,7 @@ function notify_server_to_end_sse_session() {
   })
 }
 
-// 切换 SSE 连接
-button2.addEventListener('click', () => {
+function toggle_sse() {
   if (isListening) {
     // 如果正在监听，关闭 SSE 连接
     if (eventSource) {
@@ -108,12 +107,21 @@ button2.addEventListener('click', () => {
     button2.style.backgroundColor = '#dc3545';
     console.log('SSE connection established.');
   }
-});
+}
 
+// 切换 SSE 连接
+button2.addEventListener('click', toggle_sse());
 window.addEventListener('beforeunload', () => {if (eventSource) eventSource.close();});
 
 // 将按钮添加到页面中
 document.body.appendChild(button2);
+// CTRL+SHIFT+H
+document.addEventListener('keydown', function (event) {
+  if (event.ctrlKey && event.shiftKey && event.key === 'H') {
+    event.preventDefault();
+    toggle_sse();
+  }
+});
 
 const inputEvent = new Event('input', {
   bubbles: true,    // 事件是否冒泡
