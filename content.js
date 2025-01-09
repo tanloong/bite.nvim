@@ -110,7 +110,7 @@ function toggle_sse() {
 }
 
 // 切换 SSE 连接
-button2.addEventListener('click', toggle_sse());
+button2.addEventListener('click', toggle_sse);
 window.addEventListener('beforeunload', () => {if (eventSource) eventSource.close();});
 
 // 将按钮添加到页面中
@@ -261,7 +261,7 @@ function fetch_content() {
   })
 }
 
-function fetch_slice() {
+function _fetch_slice() {
   let data = {}
 
   let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
@@ -270,12 +270,15 @@ function fetch_slice() {
     let region = regions[i]
     let start = region.querySelector("handle.waver-handle.waver-handle-start").getBoundingClientRect().x;
     let end = region.querySelector("handle.waver-handle.waver-handle-end").getBoundingClientRect().x;
-    console.log(start)
-    console.log(end)
     start = String(start);
     end = String(end);
     data[String(i + 1)] = {start: start, end: end}
   }
+  return data
+}
+
+function fetch_slice() {
+  let data = _fetch_slice()
   fetch('http://127.0.0.1:9001/fetch_slice', {
     method: "POST",
     headers: {"Content-Type": "application/json"},
@@ -289,7 +292,6 @@ function fetch_progress() {
   let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
   let x = String(wave.querySelector("wave").getBoundingClientRect().right);
   console.log(wave.querySelector("wave"));
-  console.log(x);
   fetch('http://127.0.0.1:9001/fetch_progress', {
     method: "POST",
     headers: {"Content-Type": "application/json"},
@@ -302,6 +304,21 @@ function fetch_progress() {
 function push_slice(data) {
   let section = data['section'];
   let edge = data['edge'];
+  let section_edge_pos1 = data['section_edge_pos'];
+  let section_edge_pos2 = _fetch_slice();
+
+  // 如果在上一次fetch_slice之后，播放过音频，位置时间比会变化，导致要设置的边界位置与期望时间点不一致，
+  // 这里获取最新的边界位置判断是否有变，若是则要求按新的位置重新设置。
+  let ok = false;
+  for (let section in section_edge_pos1) {
+    console.log(`section_edge_pos1\nstart: ${section_edge_pos1[section]["start"]}, end: ${section_edge_pos1[section]["end"]}\n\nsection_edge_pos2\nstart: ${section_edge_pos2[section]["start"]}, end: ${section_edge_pos2[section]["end"]}`);
+    if (
+      section_edge_pos1[section]["start"] === section_edge_pos2[section]["start"] &&
+      section_edge_pos1[section]["end"] === section_edge_pos2[section]["end"]
+    ) {ok = true; break;}
+  }
+  if (!ok) {nvim_log("设置边界失败，原位置时间比已变更，请重新设置"); fetch_slice(); return;}
+
   let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
   let region = wave.querySelector(`region[data-id="${section}"]`);
   let handle = region.querySelector(`handle.waver-handle.waver-handle-${edge}`);
@@ -311,11 +328,9 @@ function push_slice(data) {
   let y1 = rect_handle.y
   let x2 = Number(data["x"])
   let y2 = y1
-  // 创建鼠标按下事件
+  // 创建鼠标按下、移动、松开事件
   let mousedownEvent = new MouseEvent('mousedown', {bubbles: true, cancelable: true, clientX: x1, clientY: y1});
-  // 创建鼠标移动事件
   let mousemoveEvent = new MouseEvent('mousemove', {bubbles: true, cancelable: true, clientX: x2, clientY: y2});
-  // 创建鼠标松开事件
   let mouseupEvent = new MouseEvent('mouseup', {bubbles: true, cancelable: true, clientX: x2, clientY: y2});
   handle.dispatchEvent(mousedownEvent); handle.dispatchEvent(mousemoveEvent); handle.dispatchEvent(mouseupEvent)
   nvim_log(`Set section ${section} ${edge} as ${x2}`)

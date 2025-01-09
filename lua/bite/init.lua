@@ -172,7 +172,7 @@ end
 _H.section2dict = function(n)
   if n == nil then
     n = _H.get_curr_section_nr()
-    if n ~= nil then return end
+    if n == nil then return end
   end
 
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
@@ -215,9 +215,44 @@ _H.section2dict = function(n)
     until true
   end
 
-  if data[n] ~= nil then
-    data = { [n] = data[n] }
+  if data[n] ~= nil then data = { [n] = data[n] } end
+  return data
+end
+
+---Converts the n-th section to into dict. Converts all sections if n <= 0 or n > last_section.
+---@param n string|nil
+_H.buffer2dict_slice = function(n)
+  if n == nil then
+    n = _H.get_curr_section_nr()
+    if n == nil then return end
   end
+
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local data = {}
+  local section, _section, subsection, _subsection, _key, _value
+  for _, line in ipairs(lines) do
+    repeat
+      -- skip empty lines
+      if line == "" then break end -- continue
+
+      -- [start] xxx.xxx, [end] xxx.xxx
+      _key, _value = line:match "^%[([^]]+)%]%s+(.*)$"
+      if _key ~= nil and _value ~= nil then
+        data[section][_key] = _value
+        break
+      end
+
+      -- # 1, #2, ...
+      _section = line:match "^# (%d+)"
+      if _section ~= nil then
+        section = _section
+        data[section] = {}
+        break -- continue
+      end
+    until true
+  end
+
+  if data[n] ~= nil then data = { [n] = data[n] } end
   return data
 end
 
@@ -247,16 +282,20 @@ M.cmd.back = function() vim.fn["BiteSendData"] { action = "back", count = vim.v.
 M.cmd.init_transcripts = function() vim.fn["BiteSendData"] { action = "init_transcripts" } end
 
 ---调整一个小节起/止时刻，参数并非时刻而是起/止边界的期望像素位置
+---@param section string number-like
 ---@param edge string `start` | `end`
 ---@param x string number-like
 M.cmd.push_slice = function(section, edge, x)
-  vim.fn["BiteSendData"]
-  { action = "push_slice", section = section, edge = edge, x = x }
+  local section_edge_pos = _H.buffer2dict_slice "0"
+
+  vim.fn["BiteSendData"] { action = "push_slice", section = section, edge = edge, x = x, section_edge_pos = section_edge_pos }
 end
 
 _H.push_currline_slice = function()
   local line = vim.api.nvim_get_current_line()
   local section = _H.get_curr_section_nr()
+  if section == nil then return end
+
   local edge, value = line:match "^%[([^]]+)%]%s+(.*)$"
   if edge ~= "start" and edge ~= "end" then
     vim.notify("Cursor not on a slice edge!", vim.log.levels.ERROR)
@@ -346,7 +385,7 @@ M.config = {
     { "n", "<space>", M.cmd.toggle, opt },
     { "n", "<left>", M.cmd.back, opt },
     { "n", "gI", M.cmd.init_transcripts, opt },
-    { "n", "gr", vim.fn["BiteToggleServer"], opt },
+    { "n", "<c-s-h>", vim.fn["BiteToggleServer"], opt },
     { "n", "g<enter>", _H.push_currline_slice, opt },
     { "n", "<leader><enter>", M.cmd.fetch_slice, opt },
     { "n", "<up>", function() M.cmd.speed(1) end, opt },
