@@ -66,7 +66,7 @@ M.next_section = function()
   vim.fn.search("^# ", "W")
 end
 
--- Returns the lines of the current section.
+---Returns the lines of the current section. Metadata lines are excluded, i.e. [start], [end].
 M.get_section_lines = function()
   local lines = {}
   local curr_lineno = vim.api.nvim_win_get_cursor(0)[1]
@@ -74,12 +74,12 @@ M.get_section_lines = function()
   for i = curr_lineno, 1, -1 do
     line = vim.fn.getline(i)
     if line:match "^# " then break end
-    if line ~= "" then table.insert(lines, 1, line) end
+    if line ~= "" and not line:match "^%[" then table.insert(lines, 1, line) end
   end
   for i = curr_lineno + 1, vim.fn.line "$" do
     line = vim.fn.getline(i)
     if line:match "^# " then break end
-    if line ~= "" then table.insert(lines, line) end
+    if line ~= "" and not line:match "^%[" then table.insert(lines, line) end
   end
   return lines
 end
@@ -158,8 +158,12 @@ _H.store_orig_mapping = function(key, mode)
 end
 
 ---@return string
-_H.get_curr_section = function()
+_H.get_curr_section_nr = function()
   local section_lineno = vim.fn.search("^# ", "cbWn")
+  if section_lineno == 0 then
+    vim.notify "Not in a section! Using section 1."
+    return "1"
+  end
   return vim.fn.getline(section_lineno):match "^# (%d+)"
 end
 
@@ -167,21 +171,32 @@ end
 ---@param n string
 _H.section2dict = function(n)
   ---@type string
-  if n == nil then n = _H.get_curr_section() end
+  if n == nil then n = _H.get_curr_section_nr() end
 
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   local data = {}
-  local section, _section, subsection, _subsection
+  local section, _section, subsection, _subsection, _key, _value
   for _, line in ipairs(lines) do
     repeat
       -- skip empty lines
       if line == "" then break end -- continue
+
+      -- [start] xxx.xxx, [end] xxx.xxx
+      _key, _value = line:match "^%[([^]]+)%]%s+(.*)$"
+      if _key ~= nil and _value ~= nil then
+        data[section][_key] = _value
+        break
+      end
+
+      -- # 1, #2, ...
       _section = line:match "^# (%d+)"
       if _section ~= nil then
         section = _section
         data[section] = {}
         break -- continue
       end
+
+      -- ## xxx
       _subsection = line:match "^## (%S+)"
       if _subsection ~= nil then
         subsection = _subsection
@@ -189,6 +204,7 @@ _H.section2dict = function(n)
         break -- continue
       end
 
+      -- content line
       if data[section][subsection] == "" then
         data[section][subsection] = line
       else
@@ -213,13 +229,78 @@ end
 ---Plays audio of the n-th section. The JS end does nothing if n is invalid.
 ---@param n string
 M.cmd.play = function(n)
-  if n == nil then n = _H.get_curr_section() end
+  if n == nil then n = _H.get_curr_section_nr() end
   vim.fn["BiteSendData"] { action = "play", section = n }
 end
 ---Turns on/off interval audio.
 M.cmd.toggle = function() vim.fn["BiteSendData"] { action = "toggle" } end
+
 M.cmd.back = function() vim.fn["BiteSendData"] { action = "back" } end
+
+---应用每一节的“模型预识别文本”到“英文转写结果”框中
 M.cmd.init_transcripts = function() vim.fn["BiteSendData"] { action = "init_transcripts" } end
+
+---调整一个小节起/止时刻，参数并非时刻而是起/止边界的期望像素位置
+---@param edge string, "start" or "end"
+---@param x string, number-like
+M.cmd.push_slice = function(section, edge, x)
+  vim.fn["BiteSendData"]
+  { action = "push_slice", section = section, edge = edge, x = x }
+end
+
+---每个区间的左右边界，会随着每次音频播放、整轴/区间轴的全屏而随机变化，所以想要在编辑器修改边界，需要先
+---fetch 一下最新边界、保持音频暂停不要播放、然后才能修改再发送到浏览器。
+---fetch 到的边界数据会从 Python 发给 _H.receive_slice() 处理。
+M.cmd.fetch_slice = function()
+  vim.fn["BiteSendData"] { action = "fetch_slice" }
+end
+
+_H.dict2section = function(data)
+  local subsections = {
+    "人工英文转写结果",
+    "人工英文断句结果",
+    "人工同传中文结果",
+    "人工同传中文断句结果",
+    "人工英文顺滑结果",
+    "人工英文顺滑断句结果",
+  }
+
+  local lines = {}
+  ---@type string[]
+  local sections = vim.fn.sort(vim.tbl_keys(data), "N")
+  for _, section in ipairs(sections) do
+    table.insert(lines, string.format("# %s", section))
+    table.insert(lines, string.format("[start] %s", data[section]["start"]))
+    table.insert(lines, string.format("[end] %s", data[section]["end"]))
+    table.insert(lines, "")
+    for _, subsection in ipairs(subsections) do
+      table.insert(lines, string.format("## %s", subsection))
+      table.insert(lines, "")
+      table.insert(lines, data[section][subsection])
+      table.insert(lines, "")
+    end
+  end
+  vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+end
+
+---@param data table
+_H.receive_slice = function(data)
+  local section_subsection_line = _H.section2dict "0"
+  local new = vim.tbl_deep_extend("force", section_subsection_line, data)
+  _H.dict2section(new)
+end
+
+M.cmd.fetch_content = function()
+  vim.fn["BiteSendData"] { action = "fetch_content" }
+end
+
+_H.slice_currline = function()
+  local line = vim.api.nvim_get_current_line()
+  local section = _H.get_curr_section_nr()
+  local edge, value = line:match "^%[([^]]+)%]%s+(.*)$"
+  if edge ~= "start" and edge ~= "end" then return end
+  M.cmd.push_slice(section, edge, value)
+end
 
 local opt = { buffer = true, nowait = true, noremap = true }
 M.config = {
@@ -237,6 +318,7 @@ M.config = {
     { "n", "<left>", M.cmd.back, opt },
     { "n", "gI", M.cmd.init_transcripts, opt },
     { "n", "gr", vim.fn["BiteToggleServer"], opt },
+    { "n", "g<enter>", _H.slice_currline, opt },
   }
 }
 

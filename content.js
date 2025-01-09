@@ -2,28 +2,13 @@
 
 console.log("content.js is running."); // 检查脚本是否加载
 
-const button1 = document.createElement('button');
-button1.id = '2editor';
-button1.textContent = 'To Editor';
-
-button1.style.position = 'fixed';
-button1.style.top = '10px';
-button1.style.left = '10px';
-button1.style.padding = '10px 20px';
-button1.style.backgroundColor = '#007bff';
-button1.style.color = 'white';
-button1.style.border = 'none';
-button1.style.borderRadius = '5px';
-button1.style.cursor = 'pointer';
-button1.style.zIndex = '1000'; // 确保按钮在最上层
-
 // 创建第二个按钮：Listen Editor
 const button2 = document.createElement('button');
 button2.id = 'listen_editor';
 button2.textContent = 'Listen Editor';
 button2.style.position = 'fixed';
 button2.style.top = '10px';
-button2.style.left = '120px'; // 放在 To Editor 按钮旁边
+button2.style.left = '10px'; // 放在 To Editor 按钮旁边
 button2.style.padding = '10px 20px';
 button2.style.backgroundColor = '#007bff';
 button2.style.color = 'white';
@@ -47,7 +32,7 @@ function close_sse() {
 }
 
 function notify_server_to_end_sse_session() {
-  fetch('http://127.0.0.1:9001/close-sse', {
+  fetch('http://127.0.0.1:9001/close_sse', {
     method: 'POST'
   }).then(function (res) {
     console.log(res);
@@ -70,7 +55,7 @@ button2.addEventListener('click', () => {
     eventSource.onmessage = function (event) {
       console.log(event.data);
       let data = JSON.parse(event.data)[0]
-      switch (data["action"]) {
+      switch (data["action"]) {//{{{
         case "play":
           play(data);
           break;
@@ -86,15 +71,24 @@ button2.addEventListener('click', () => {
         case "init_transcripts":
           init_transcripts();
           break;
+        case "push_slice":
+          push_slice(data);
+          break;
+        case "fetch_slice":
+          fetch_slice(data);
+          break;
         case "close_sse":
           close_sse();
+          break;
+        case "fetch_content":
+          fetch_content(data);
           break;
         default:
           console.log('Unknown action:', data["action"]);
           break;
       };
       editor2browser(data);
-    }
+    }//}}}
 
     // 处理错误
     eventSource.onerror = function (error) {
@@ -112,20 +106,8 @@ button2.addEventListener('click', () => {
 
 window.addEventListener('beforeunload', () => {if (eventSource) eventSource.close();});
 
-// 悬停效果
-button1.addEventListener('mouseenter', () => {
-  button1.style.backgroundColor = '#0056b3';
-});
-button1.addEventListener('mouseleave', () => {
-  button1.style.backgroundColor = '#007bff';
-});
-
 // 将按钮添加到页面中
-document.body.appendChild(button1);
 document.body.appendChild(button2);
-
-// 绑定点击事件
-button1.addEventListener('click', browser2editor);
 
 const inputEvent = new Event('input', {
   bubbles: true,    // 事件是否冒泡
@@ -209,11 +191,14 @@ function init_transcripts() {
   }
 }
 
-function browser2editor(event) {
+function fetch_content(event) {
   let root = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(3) > div")
+  let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
+
   var section, subsection, section_head, section_body, section_tail, label, containers, elem
   let data = {}
   for (let i = 0; i < root.children.length; i++) {
+    // 1. 收集文本框内容
     section = root.children[i].children[0];
     [section_head, section_body, section_tail] = section.children;
     //  // 序号，如1、2等，每大条一共约二三十个序号
@@ -221,9 +206,7 @@ function browser2editor(event) {
     containers = section_body.querySelectorAll(".neeko-container");
     var subsection_text = {};
     // containers.forEach(c => {console.log(c.querySelectorAll(".neeko-text").length)}) 返回
-    // 3个12 (抛弃 3 个只读文本框，模型识别文本、模型识别文本和顺滑、模型预翻译文本)
-    // 6个2 (这 6 个才是需要的)
-    // 2个0
+    // 3个12 (抛弃 3 个只读文本框，模型识别文本、模型识别文本和顺滑、模型预翻译文本)、6个2 (这 6 个才是需要的)、2个0
     containers.forEach(container => {
       if (container.querySelectorAll(".neeko-text").length !== 2) {return;}
 
@@ -236,9 +219,16 @@ function browser2editor(event) {
       let text = elem.textContent.trim();
       subsection_text[subsection] = text;
     });
+    // 2. 收集起止时间
+    let region = wave.querySelector(`region[data-id="${i + 1}"`);
+    let start = region.querySelector("handle.waver-handle.waver-handle-start").getBoundingClientRect().x;
+    let end = region.querySelector("handle.waver-handle.waver-handle-end").getBoundingClientRect().x;
+    subsection_text['start'] = start;
+    subsection_text['end'] = end;
+    // 3. 保存到 data
     data[label] = subsection_text
   }
-  const response = fetch('http://127.0.0.1:9001', {
+  const response = fetch('http://127.0.0.1:9001/fetch_content', {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify(data)
@@ -247,3 +237,43 @@ function browser2editor(event) {
   })
 }
 
+function fetch_slice() {
+  let data = {}
+  let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
+  let regions = wave.querySelectorAll("region");
+  for (let i = 0; i < regions.length; i++) {
+    let region = regions[i]
+    let start = region.querySelector("handle.waver-handle.waver-handle-start").getBoundingClientRect().x;
+    let end = region.querySelector("handle.waver-handle.waver-handle-end").getBoundingClientRect().x;
+    data[String(i + 1)] = {start: start, end: end}
+  }
+  fetch('http://127.0.0.1:9001/fetch_slice', {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(data)
+  }).then(function (res) {
+    console.log(res);
+  })
+}
+
+function push_slice(data) {
+  let section = data['section'];
+  let edge = data['edge'];
+
+  let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
+  let region = wave.querySelector(`region[data-id="${section}"]`);
+  let handle = region.querySelector(`handle.waver-handle.waver-handle-${edge}`);
+  let rect_handle = handle.getBoundingClientRect();
+
+  let x1 = rect_handle.x
+  let y1 = rect_handle.y
+  let x2 = Number(data["x"])
+  let y2 = y1
+  // 创建鼠标按下事件
+  let mousedownEvent = new MouseEvent('mousedown', {bubbles: true, cancelable: true, clientX: x1, clientY: y1});
+  // 创建鼠标移动事件
+  let mousemoveEvent = new MouseEvent('mousemove', {bubbles: true, cancelable: true, clientX: x2, clientY: y2});
+  // 创建鼠标松开事件
+  let mouseupEvent = new MouseEvent('mouseup', {bubbles: true, cancelable: true, clientX: x2, clientY: y2});
+  handle.dispatchEvent(mousedownEvent); handle.dispatchEvent(mousemoveEvent); handle.dispatchEvent(mouseupEvent)
+}

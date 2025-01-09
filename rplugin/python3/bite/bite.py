@@ -20,9 +20,11 @@ logging.basicConfig(
 
 
 class Server(SimpleHTTPRequestHandler):
-    def __init__(self, nvim, q: queue.Queue, request, client_address, server):
+    def __init__(self, nvim: pynvim.Nvim, mod, q: queue.Queue, request, client_address, server):
         self.nvim = nvim
+        self.mod = mod
         self.q = q
+
         super().__init__(request, client_address, server)
 
     def do_GET(self):
@@ -44,7 +46,7 @@ class Server(SimpleHTTPRequestHandler):
 
             if data is None:
                 logging.info("从队列中读取到 None，退出当前 do_GET")
-                self.wfile.write(b"data: [{\"action\": \"close_sse\"}]\n\n")
+                self.wfile.write(b'data: [{"action": "close_sse"}]\n\n')
                 return
 
             json_data = json.dumps(data, ensure_ascii=False)
@@ -63,6 +65,40 @@ class Server(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
+    def _close_sse(self):
+        self.q.put(None)
+        logging.info("收到关闭 SSE 请求，向队列中放入 None")
+        self.wfile.write(json.dumps({"status": "ok", "msg": "已收到关闭 SSE 请求"}).encode("utf-8"))
+
+    def _parse_data(self):
+        content_length = int(self.headers["Content-Length"])
+        post_data = self.rfile.read(content_length)
+        try:
+            data = json.loads(post_data.decode("utf-8"))
+        except json.JSONDecodeError:
+            return None
+        return data
+
+    def _fetch_content(self):
+        data = self._parse_data()
+        if data is None:
+            self.send_error(400, "Invalid JSON")
+            return
+
+        logging.info(data)
+        self.nvim.async_call(lambda: self.mod._H.dict2section(data))
+        self.wfile.write(json.dumps({"status": "ok", "msg": "fetch_content已收到"}).encode("utf-8"))
+
+    def _fetch_slice(self):
+        data = self._parse_data()
+        if data is None:
+            self.send_error(400, "Invalid JSON")
+            return
+        logging.info(data)
+
+        self.nvim.async_call(lambda: self.mod._H.receive_slice(data))
+        self.wfile.write(json.dumps({"status": "ok", "msg": "fetch_slice已收到"}).encode("utf-8"))
+
     def do_POST(self):
         # 设置 CORS 头
         self.send_response(200)
@@ -70,48 +106,26 @@ class Server(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")  # 允许所有域
         self.end_headers()
 
-        if self.path == "/close-sse":
-            self.q.put(None)
-            logging.info("收到关闭 SSE 请求，向队列中放入 None")
-            self.wfile.write(json.dumps({"status": "ok", "msg": "已收到关闭 SSE 请求"}).encode("utf-8"))
-            return
-
-        content_length = int(self.headers["Content-Length"])
-        post_data = self.rfile.read(content_length)
-        try:
-            data = json.loads(post_data.decode("utf-8"))
-        except json.JSONDecodeError:
-            self.send_error(400, "Invalid JSON")
-            return
-        subsections = (
-            "人工英文转写结果",
-            "人工英文断句结果",
-            "人工同传中文结果",
-            "人工同传中文断句结果",
-            "人工英文顺滑结果",
-            "人工英文顺滑断句结果",
-        )
-        subsection_lines = []
-        for k in sorted(data.keys(), key=lambda s: int(s)):
-            subsection_lines.append("# " + k)
-            subsection_lines.append("")
-            for subsection in subsections:
-                subsection_lines.append("## " + subsection)
-                subsection_lines.append("")
-                subsection_lines.append(data[k][subsection])
-                subsection_lines.append("")
-        self.nvim.async_call(lambda: self.nvim.current.buffer.append(subsection_lines))
-        self.wfile.write(json.dumps({"status": "ok", "msg": "已收到数据"}).encode("utf-8"))
+        if self.path == "/close_sse":
+            self._close_sse()
+        elif self.path == "/fetch_slice":
+            self._fetch_slice()
+        elif self.path == "/fetch_content":
+            self._fetch_content()
 
 
 @pynvim.plugin
 class Bite:
     def __init__(self, nvim):
-        self.nvim = nvim
         self.q = queue.Queue()
         self.httpd_server = None
         self.thread_server = None
         self.port = 9001
+
+        self.nvim = nvim
+        # https://pynvim.readthedocs.io/en/latest/usage/python-plugin-api.html#lua-integration
+        self.nvim.exec_lua("_bite = require 'bite'")
+        self.mod = self.nvim.lua._bite
 
     @pynvim.function("BiteStartServer", sync=False)
     def start_server(self, *_):
@@ -124,7 +138,9 @@ class Bite:
             logging.info("%s 端口被占用", self.port)
             return
 
-        self.httpd_server = ThreadingHTTPServer(("", self.port), lambda *args: Server(self.nvim, self.q, *args))
+        self.httpd_server = ThreadingHTTPServer(
+            ("", self.port), lambda *args: Server(self.nvim, self.mod, self.q, *args)
+        )
 
         self.thread_server = threading.Thread(target=self.httpd_server.serve_forever, daemon=True)
         self.thread_server.start()
