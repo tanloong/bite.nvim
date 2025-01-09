@@ -157,21 +157,23 @@ _H.store_orig_mapping = function(key, mode)
   end
 end
 
----@return string
+---@return string|nil
 _H.get_curr_section_nr = function()
   local section_lineno = vim.fn.search("^# ", "cbWn")
   if section_lineno == 0 then
-    vim.notify "Not in a section! Using section 1."
-    return "1"
+    vim.notify("Not in a section!", vim.log.levels.ERROR)
+    return
   end
   return vim.fn.getline(section_lineno):match "^# (%d+)"
 end
 
 ---Converts the n-th section to into dict. Converts all sections if n <= 0 or n > last_section.
----@param n string
+---@param n string|nil
 _H.section2dict = function(n)
-  ---@type string
-  if n == nil then n = _H.get_curr_section_nr() end
+  if n == nil then
+    n = _H.get_curr_section_nr()
+    if n ~= nil then return end
+  end
 
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   local data = {}
@@ -227,9 +229,12 @@ M.cmd.put = function(n)
   vim.fn["BiteSendData"](data)
 end
 ---Plays audio of the n-th section. The JS end does nothing if n is invalid.
----@param n string
+---@param n string|nil
 M.cmd.play = function(n)
-  if n == nil then n = _H.get_curr_section_nr() end
+  if n == nil then
+    n = _H.get_curr_section_nr()
+    if n == nil then return end
+  end
   vim.fn["BiteSendData"] { action = "play", section = n }
 end
 ---Turns on/off interval audio.
@@ -241,8 +246,8 @@ M.cmd.back = function() vim.fn["BiteSendData"] { action = "back" } end
 M.cmd.init_transcripts = function() vim.fn["BiteSendData"] { action = "init_transcripts" } end
 
 ---调整一个小节起/止时刻，参数并非时刻而是起/止边界的期望像素位置
----@param edge string, "start" or "end"
----@param x string, number-like
+---@param edge string `start` | `end`
+---@param x string number-like
 M.cmd.push_slice = function(section, edge, x)
   vim.fn["BiteSendData"]
   { action = "push_slice", section = section, edge = edge, x = x }
@@ -290,11 +295,25 @@ _H.receive_slice = function(data)
   _H.dict2section(new)
 end
 
+M.cmd.fetch_progress = function()
+  vim.fn["BiteSendData"] { action = "fetch_progress" }
+end
+
+_H.receive_progress = function(data)
+  local n = _H.get_curr_section_nr()
+  if n == nil then return end
+  ---@type number
+  local _edge = vim.fn.confirm("Apply " .. data.x .. " to which edge?", "&Start\n&End\n&Cancel")
+  local edge
+  if _edge == 1 then edge = "start" elseif _edge == 2 then edge = "end" else return end
+  M.cmd.push_slice(n, edge, data.x)
+end
+
 M.cmd.fetch_content = function()
   vim.fn["BiteSendData"] { action = "fetch_content" }
 end
 
-_H.slice_currline = function()
+_H.push_currline_slice = function()
   local line = vim.api.nvim_get_current_line()
   local section = _H.get_curr_section_nr()
   local edge, value = line:match "^%[([^]]+)%]%s+(.*)$"
@@ -314,11 +333,12 @@ M.config = {
     { "n", "]]", M.next_section, opt },
     { "n", "<c-t>", M.diff_orig_smth, opt },
     { "n", "gp", M.cmd.play, opt },
-    { "n", "gP", M.cmd.toggle, opt },
+    { "n", "<space>", M.cmd.toggle, opt },
     { "n", "<left>", M.cmd.back, opt },
     { "n", "gI", M.cmd.init_transcripts, opt },
     { "n", "gr", vim.fn["BiteToggleServer"], opt },
-    { "n", "g<enter>", _H.slice_currline, opt },
+    { "n", "g<enter>", _H.push_currline_slice, opt },
+    { "n", "<leader><enter>", M.cmd.fetch_slice, opt },
   }
 }
 

@@ -77,6 +77,9 @@ button2.addEventListener('click', () => {
         case "fetch_slice":
           fetch_slice(data);
           break;
+        case "fetch_progress":
+          fetch_progress(data);
+          break;
         case "close_sse":
           close_sse();
           break;
@@ -118,7 +121,6 @@ const clickEvent = new Event('click', {
   cancelable: true  // 事件是否可以取消
 });
 
-
 function editor2browser(data) {
   let root = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(3) > div")
   var section, subsection, section_head, section_body, section_tail, label, containers, elem
@@ -156,7 +158,6 @@ function play(data) {
   //  btn = btns.querySelector("svg:nth-child(4)")
   //}
   //btn.dispatchEvent(clickEvent);
-
   let root = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(3) > div")
   var section, subsection, section_head, section_body, section_tail, label, containers, elem
   for (let i = 0; i < root.children.length; i++) {
@@ -194,7 +195,6 @@ function init_transcripts() {
 function fetch_content(event) {
   let root = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(3) > div")
   let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
-
   var section, subsection, section_head, section_body, section_tail, label, containers, elem
   let data = {}
   for (let i = 0; i < root.children.length; i++) {
@@ -239,6 +239,7 @@ function fetch_content(event) {
 
 function fetch_slice() {
   let data = {}
+
   let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
   let regions = wave.querySelectorAll("region");
   for (let i = 0; i < regions.length; i++) {
@@ -256,10 +257,21 @@ function fetch_slice() {
   })
 }
 
+function fetch_progress() {
+  let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
+  let x = wave.querySelector("wave").getBoundingClientRect().right;
+  fetch('http://127.0.0.1:9001/fetch_progress', {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({x: x})
+  }).then(function (res) {
+    console.log(res);
+  })
+}
+
 function push_slice(data) {
   let section = data['section'];
   let edge = data['edge'];
-
   let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
   let region = wave.querySelector(`region[data-id="${section}"]`);
   let handle = region.querySelector(`handle.waver-handle.waver-handle-${edge}`);
