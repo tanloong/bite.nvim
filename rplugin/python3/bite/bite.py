@@ -109,6 +109,15 @@ class Server(SimpleHTTPRequestHandler):
         self.nvim.async_call(lambda: self.mod._H.receive_progress(data))
         self.wfile.write(json.dumps({"status": "ok", "msg": "fetch_progress已收到"}).encode("utf-8"))
 
+    def _nvim_log(self):
+        data = self._parse_data()
+        if data is None:
+            self.send_error(400, "Invalid JSON")
+            return
+
+        cmd = f"vim.notify([[{data['msg']}]], vim.log.levels.{data['level']})"
+        self.nvim.async_call(lambda: self.nvim.exec_lua(cmd))
+
     def do_POST(self):
         # 设置 CORS 头
         self.send_response(200)
@@ -124,6 +133,8 @@ class Server(SimpleHTTPRequestHandler):
             self._fetch_content()
         elif self.path == "/fetch_progress":
             self._fetch_progress()
+        elif self.path == "/log":
+            self._nvim_log()
 
 
 @pynvim.plugin

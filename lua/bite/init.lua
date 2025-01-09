@@ -52,11 +52,11 @@ end
 
 M.prev_subsection = function()
   vim.fn.search("^## ", "bW")
-  vim.fn.search("^[^#]", "bW")
+  vim.fn.search("^[^#[]", "bW")
 end
 M.next_subsection = function()
   vim.fn.search("^## ", "W")
-  vim.fn.search("^[^#]", "W")
+  vim.fn.search("^[^#[]", "W")
 end
 M.prev_section = function()
   vim.fn.search("^# ", "bW")
@@ -240,9 +240,10 @@ end
 ---Turns on/off interval audio.
 M.cmd.toggle = function() vim.fn["BiteSendData"] { action = "toggle" } end
 
-M.cmd.back = function() vim.fn["BiteSendData"] { action = "back" } end
+M.cmd.back = function() vim.fn["BiteSendData"] { action = "back", count = vim.v.count1 } end
 
 ---应用每一节的“模型预识别文本”到“英文转写结果”框中
+---JS 那边完成后会主动发一个 fetch_content 来更新当前 buffer
 M.cmd.init_transcripts = function() vim.fn["BiteSendData"] { action = "init_transcripts" } end
 
 ---调整一个小节起/止时刻，参数并非时刻而是起/止边界的期望像素位置
@@ -251,6 +252,17 @@ M.cmd.init_transcripts = function() vim.fn["BiteSendData"] { action = "init_tran
 M.cmd.push_slice = function(section, edge, x)
   vim.fn["BiteSendData"]
   { action = "push_slice", section = section, edge = edge, x = x }
+end
+
+_H.push_currline_slice = function()
+  local line = vim.api.nvim_get_current_line()
+  local section = _H.get_curr_section_nr()
+  local edge, value = line:match "^%[([^]]+)%]%s+(.*)$"
+  if edge ~= "start" and edge ~= "end" then
+    vim.notify("Cursor not on a slice edge!", vim.log.levels.ERROR)
+    return
+  end
+  M.cmd.push_slice(section, edge, value)
 end
 
 ---每个区间的左右边界，会随着每次音频播放、整轴/区间轴的全屏而随机变化，所以想要在编辑器修改边界，需要先
@@ -275,6 +287,7 @@ _H.dict2section = function(data)
   local sections = vim.fn.sort(vim.tbl_keys(data), "N")
   for _, section in ipairs(sections) do
     table.insert(lines, string.format("# %s", section))
+    table.insert(lines, "")
     table.insert(lines, string.format("[start] %s", data[section]["start"]))
     table.insert(lines, string.format("[end] %s", data[section]["end"]))
     table.insert(lines, "")
@@ -307,18 +320,15 @@ _H.receive_progress = function(data)
   local edge
   if _edge == 1 then edge = "start" elseif _edge == 2 then edge = "end" else return end
   M.cmd.push_slice(n, edge, data.x)
+  M.cmd.fetch_slice()
 end
 
 M.cmd.fetch_content = function()
   vim.fn["BiteSendData"] { action = "fetch_content" }
 end
 
-_H.push_currline_slice = function()
-  local line = vim.api.nvim_get_current_line()
-  local section = _H.get_curr_section_nr()
-  local edge, value = line:match "^%[([^]]+)%]%s+(.*)$"
-  if edge ~= "start" and edge ~= "end" then return end
-  M.cmd.push_slice(section, edge, value)
+M.cmd.speed = function(offset)
+  vim.fn["BiteSendData"] { action = "speed", offset = offset }
 end
 
 local opt = { buffer = true, nowait = true, noremap = true }
@@ -339,6 +349,8 @@ M.config = {
     { "n", "gr", vim.fn["BiteToggleServer"], opt },
     { "n", "g<enter>", _H.push_currline_slice, opt },
     { "n", "<leader><enter>", M.cmd.fetch_slice, opt },
+    { "n", "<up>", function() M.cmd.speed(1) end, opt },
+    { "n", "<down>", function() M.cmd.speed(-1) end, opt },
   }
 }
 

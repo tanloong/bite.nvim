@@ -63,7 +63,7 @@ button2.addEventListener('click', () => {
           toggle();
           break;
         case "back":
-          back();
+          back(data);
           break;
         case "put":
           editor2browser(data);
@@ -80,11 +80,14 @@ button2.addEventListener('click', () => {
         case "fetch_progress":
           fetch_progress(data);
           break;
+        case "speed":
+          speed(data);
+          break;
         case "close_sse":
           close_sse();
           break;
         case "fetch_content":
-          fetch_content(data);
+          fetch_content();
           break;
         default:
           console.log('Unknown action:', data["action"]);
@@ -95,7 +98,7 @@ button2.addEventListener('click', () => {
 
     // 处理错误
     eventSource.onerror = function (error) {
-      console.error('EventSource failed:', error);
+      console.log('EventSource failed:', error);
       // 发生错误时关闭连接
       close_sse();
     };
@@ -147,6 +150,14 @@ function editor2browser(data) {
   };
 }
 
+function nvim_log(msg, level = "INFO") {
+  fetch('http://127.0.0.1:9001/log', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({msg: msg, level: level})
+  })
+}
+
 function play(data) {
   //let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
   //let region = wave.querySelector(`region[data-id="${data['section']}"]`);
@@ -176,9 +187,12 @@ function toggle() {
   btn.dispatchEvent(clickEvent)
 }
 
-function back() {
+function back(data) {
   let btn = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.btns-play > svg:nth-child(2)")
-  btn.dispatchEvent(clickEvent)
+  let count = Number(data['count'])
+  for (let i = 1; i <= count; i++) {
+    btn.dispatchEvent(clickEvent)
+  }
 }
 
 function init_transcripts() {
@@ -190,9 +204,11 @@ function init_transcripts() {
     btn = section_body.querySelector("button")
     btn.dispatchEvent(clickEvent)
   }
+  nvim_log("英文转写已初始化");
+  fetch_content();
 }
 
-function fetch_content(event) {
+function fetch_content() {
   let root = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(3) > div")
   let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
   var section, subsection, section_head, section_body, section_tail, label, containers, elem
@@ -246,6 +262,10 @@ function fetch_slice() {
     let region = regions[i]
     let start = region.querySelector("handle.waver-handle.waver-handle-start").getBoundingClientRect().x;
     let end = region.querySelector("handle.waver-handle.waver-handle-end").getBoundingClientRect().x;
+    console.log(start)
+    console.log(end)
+    start = String(start);
+    end = String(end);
     data[String(i + 1)] = {start: start, end: end}
   }
   fetch('http://127.0.0.1:9001/fetch_slice', {
@@ -259,7 +279,9 @@ function fetch_slice() {
 
 function fetch_progress() {
   let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
-  let x = wave.querySelector("wave").getBoundingClientRect().right;
+  let x = String(wave.querySelector("wave").getBoundingClientRect().right);
+  console.log(wave.querySelector("wave"));
+  console.log(x);
   fetch('http://127.0.0.1:9001/fetch_progress', {
     method: "POST",
     headers: {"Content-Type": "application/json"},
@@ -288,4 +310,40 @@ function push_slice(data) {
   // 创建鼠标松开事件
   let mouseupEvent = new MouseEvent('mouseup', {bubbles: true, cancelable: true, clientX: x2, clientY: y2});
   handle.dispatchEvent(mousedownEvent); handle.dispatchEvent(mousemoveEvent); handle.dispatchEvent(mouseupEvent)
+  nvim_log(`Set section ${section} ${edge} as ${x2}`)
+}
+
+function speed(data) {
+  let offset = Number(data["offset"])
+  let combobox = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.container-speed > div.arco-select.arco-select-single.arco-select-size-default")
+  let before = combobox.querySelector("span[class='arco-select-view-value']").textContent.trim()
+  let after = null
+
+  // 点开下拉菜单
+  let popup = document.querySelector("#arco-select-popup-0 > div > div")
+  if (popup === null) {
+    combobox.dispatchEvent(clickEvent);
+    popup = document.querySelector("#arco-select-popup-0 > div > div")
+  }
+  if (popup === null) {nvim_log("倍速失败，找不到下拉菜单"); return };
+
+  let choices = popup.querySelectorAll("li")
+  for (let i = 1; i <= choices.length; i++) {
+    if (choices[i - 1].textContent.trim() === before) {
+      after = i + offset;
+      break;
+    }
+  }
+  if (after === null) {nvim_log("倍速失败，找不到当前速度"); return };
+  if (after < 1) {nvim_log(`倍速失败，${before}已最小`); return };
+  if (after > choices.length) {nvim_log(`倍速失败，${before}已最大`); return };
+
+  // 点击目标倍速，通知 nvim
+  let li = popup.querySelector(`li:nth-child(${after})`)
+  li.dispatchEvent(clickEvent);
+  nvim_log(li.textContent.trim())
+
+  // 若下拉菜单未关闭，将其关闭
+  popup = document.querySelector("#arco-select-popup-0 > div > div")
+  if (popup !== null) {combobox.dispatchEvent(clickEvent);};
 }
