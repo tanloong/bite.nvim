@@ -134,7 +134,7 @@ _H.warn_invalid_sep = function(on)
       { "ItColor84", [[\v【?｜】?]] }, -- green, correct sep, not preceded by whitespace
       { "ItColor125", [[\v【?丨】?]] }, -- red, error for wrong sep
       { "ItColor173",
-        "\\v[[:blank:]]%(【?｜】?)@=|%([[:punct:][:alnum:]]【?｜】?)@<=[[:alnum:]]|%([，。？！”’—…]【?｜】?)@<=[[:blank:]]" } -- yellow, warning for correct sep but preceded by whitespace or not followed by whitespace in English or followed by whitespace in Chinese
+        "\\v[[:blank:]]%(【?｜】?)@=|%([[:punct:][:alnum:]]【?｜】?)@<=[[:alnum:]]|%([，。？！：”’—…]【?｜】?)@<=[[:blank:]]" } -- yellow, warning for correct sep but preceded by whitespace or not followed by whitespace in English or followed by whitespace in Chinese
     } do
       color, pat = unpack(color_pat)
       table.insert(M._match_ids, vim.fn.matchadd(color, pat))

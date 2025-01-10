@@ -38,10 +38,6 @@ test.py
 tmp
 examples/
 src/*.txt
-tests/*.java
-src/neosca_gui/data/stanza_resources
-data/stanza_resources
 *.DS_Store
 *._.
-corpus
-stanza_resources
+*.log
