@@ -89,7 +89,7 @@ end
 ---@param line2 string
 ---@param bufname1 string
 ---@param bufname2 string
-M.diff_lines = function(line1, line2, bufname1, bufname2)
+_H.diff_lines = function(line1, line2, bufname1, bufname2)
   vim.cmd [[belowright split]]
   local buf1 = vim.api.nvim_create_buf(true, true)
   vim.api.nvim_buf_set_name(buf1, bufname1)
@@ -123,7 +123,7 @@ M.diff_orig_smth = function()
       found_smooth = true
     end
   end
-  M.diff_lines(line_orig, line_smooth, "人工英文转写结果", "人工英文顺滑结果")
+  _H.diff_lines(line_orig, line_smooth, "人工英文转写结果", "人工英文顺滑结果")
 end
 
 _H.warn_invalid_sep = function(on)
@@ -288,7 +288,8 @@ M.cmd.init_transcripts = function() vim.fn["BiteSendData"] { action = "init_tran
 M.cmd.push_slice = function(section, edge, x)
   local section_edge_pos = _H.buffer2dict_slice "0"
 
-  vim.fn["BiteSendData"] { action = "push_slice", section = section, edge = edge, x = x, section_edge_pos = section_edge_pos }
+  vim.fn["BiteSendData"] { action = "push_slice", section = section, edge = edge, x = x, section_edge_pos =
+      section_edge_pos }
 end
 
 _H.push_currline_slice = function()
@@ -308,10 +309,11 @@ end
 ---fetch 一下最新边界、保持音频暂停不要播放、然后才能修改再发送到浏览器。
 ---fetch 到的边界数据会从 Python 发给 _H.receive_slice() 处理。
 M.cmd.fetch_slice = function()
-  vim.fn["BiteSendData"] { action = "fetch_slice" }
+  vim.fn["BiteSendData"] { action = "fetch_slice", callback = "callback_receive_slice" }
 end
 
-_H.dict2section = function(data)
+_H.callback_dict2buf = function(data, buf)
+  if buf == nil then buf = 0 end
   local subsections = {
     "人工英文转写结果",
     "人工英文断句结果",
@@ -337,21 +339,21 @@ _H.dict2section = function(data)
       table.insert(lines, "")
     end
   end
-  vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 end
 
 ---@param data table
-_H.receive_slice = function(data)
+_H.callback_receive_slice = function(data)
   local section_subsection_line = _H.buf2dict "0"
   local new = vim.tbl_deep_extend("force", section_subsection_line, data)
-  _H.dict2section(new)
+  _H.callback_dict2buf(new)
 end
 
 M.cmd.fetch_progress = function()
-  vim.fn["BiteSendData"] { action = "fetch_progress" }
+  vim.fn["BiteSendData"] { action = "fetch_progress", callback = "callback_receive_progress" }
 end
 
-_H.receive_progress = function(data)
+_H.callback_receive_progress = function(data)
   local n = _H.get_curr_section_nr()
   if n == nil then return end
   ---@type number
@@ -363,11 +365,36 @@ _H.receive_progress = function(data)
 end
 
 M.cmd.fetch_content = function()
-  vim.fn["BiteSendData"] { action = "fetch_content" }
+  vim.fn["BiteSendData"] { action = "fetch_content", callback = "callback_dict2buf" }
 end
 
 M.cmd.speed = function(offset)
   vim.fn["BiteSendData"] { action = "speed", offset = offset }
+end
+
+M.cmd.diff_content = function()
+  vim.fn["BiteSendData"] { action = "fetch_content", callback = "callback_diff_content" }
+end
+
+_H.callback_diff_content = function(remote)
+  vim.cmd [[exe 'normal! <c-w>o' | topleft vsplit]]
+  local buf_remote = vim.api.nvim_create_buf(true, true)
+  vim.api.nvim_buf_set_name(buf_remote, "浏览器")
+  vim.bo[buf_remote].bufhidden = "wipe"
+  vim.bo[buf_remote].buftype = "nowrite"
+  vim.api.nvim_set_current_buf(buf_remote)
+  _H.callback_dict2buf(remote, buf_remote)
+  vim.cmd [[windo diffthis]]
+end
+
+_H.callback = function(data)
+  local func = _H[data.callback]
+  if func == nil then
+    vim.notify("找不到回调函数: " .. data.callback, vim.log.levels.ERROR)
+    return
+  end
+  data.callback = nil
+  func(data)
 end
 
 local opt = { buffer = true, nowait = true, noremap = true }
@@ -391,7 +418,7 @@ M.config = {
     { "n", "<up>", function() M.cmd.speed(1) end, opt },
     { "n", "<down>", function() M.cmd.speed(-1) end, opt },
     { "n", "[b", function() vim.fn.search([[【\?｜】\?]], "b") end, opt },
-    { "n", "]b", function() vim.fn.search([[【\?｜】\?]]) end, opt },
+    { "n", "]b", function() vim.fn.search [[【\?｜】\?]] end, opt },
   }
 }
 

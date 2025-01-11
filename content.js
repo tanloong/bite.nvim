@@ -86,7 +86,7 @@ function toggle_sse() {
           close_sse();
           break;
         case "fetch_content":
-          fetch_content();
+          fetch_content(data);
           break;
         default:
           console.log('Unknown action:', data["action"]);
@@ -216,11 +216,11 @@ function init_transcripts() {
   fetch_content();
 }
 
-function fetch_content() {
+function fetch_content(data) {
   let root = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(3) > div")
   let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
   var section, subsection, section_head, section_body, section_tail, label, containers, elem
-  let data = {}
+  let ret = {}
   for (let i = 0; i < root.children.length; i++) {
     // 1. 收集文本框内容
     section = root.children[i].children[0];
@@ -250,19 +250,21 @@ function fetch_content() {
     subsection_text['start'] = start;
     subsection_text['end'] = end;
     // 3. 保存到 data
-    data[label] = subsection_text
+    ret[label] = subsection_text
   }
-  const response = fetch('http://127.0.0.1:9001/fetch_content', {
+
+  ret["callback"] = data["callback"]
+  fetch('http://127.0.0.1:9001/fetch_content', {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(data)
+    body: JSON.stringify(ret)
   }).then(function (res) {
     console.log(res);
   })
 }
 
 function _fetch_slice() {
-  let data = {}
+  let ret = {}
 
   let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
   let regions = wave.querySelectorAll("region");
@@ -272,30 +274,31 @@ function _fetch_slice() {
     let end = region.querySelector("handle.waver-handle.waver-handle-end").getBoundingClientRect().x;
     start = String(start);
     end = String(end);
-    data[String(i + 1)] = {start: start, end: end}
+    ret[String(i + 1)] = {start: start, end: end}
   }
-  return data
+  return ret
 }
 
-function fetch_slice() {
-  let data = _fetch_slice()
+function fetch_slice(data) {
+  let ret = _fetch_slice()
+  ret["callback"] = data["callback"]
   fetch('http://127.0.0.1:9001/fetch_slice', {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(data)
+    body: JSON.stringify(ret)
   }).then(function (res) {
     console.log(res);
   })
 }
 
-function fetch_progress() {
+function fetch_progress(data) {
   let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
   let x = String(wave.querySelector("wave").getBoundingClientRect().right);
-  console.log(wave.querySelector("wave"));
+  let ret = {x: x, callback: data["callback"]}
   fetch('http://127.0.0.1:9001/fetch_progress', {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({x: x})
+    body: JSON.stringify(ret)
   }).then(function (res) {
     console.log(res);
   })

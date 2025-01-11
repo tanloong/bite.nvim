@@ -79,42 +79,7 @@ class Server(SimpleHTTPRequestHandler):
             return None
         return data
 
-    def _fetch_content(self):
-        data = self._parse_data()
-        if data is None:
-            self.send_error(400, "Invalid JSON")
-            return
-
-        logging.info(data)
-        self.nvim.async_call(lambda: self.mod._H.dict2section(data))
-        self.wfile.write(json.dumps({"status": "ok", "msg": "fetch_content已收到"}).encode("utf-8"))
-
-    def _fetch_slice(self):
-        data = self._parse_data()
-        if data is None:
-            self.send_error(400, "Invalid JSON")
-            return
-        logging.info(data)
-
-        self.nvim.async_call(lambda: self.mod._H.receive_slice(data))
-        self.wfile.write(json.dumps({"status": "ok", "msg": "fetch_slice已收到"}).encode("utf-8"))
-
-    def _fetch_progress(self):
-        data = self._parse_data()
-        if data is None:
-            self.send_error(400, "Invalid JSON")
-            return
-        logging.info(data)
-
-        self.nvim.async_call(lambda: self.mod._H.receive_progress(data))
-        self.wfile.write(json.dumps({"status": "ok", "msg": "fetch_progress已收到"}).encode("utf-8"))
-
-    def _log(self):
-        data = self._parse_data()
-        if data is None:
-            self.send_error(400, "Invalid JSON")
-            return
-
+    def _log(self, data):
         cmd = f"vim.notify([[{data['msg']}]], vim.log.levels.{data['level']})"
         self.nvim.async_call(lambda: self.nvim.exec_lua(cmd))
 
@@ -125,8 +90,18 @@ class Server(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")  # 允许所有域
         self.end_headers()
 
-        if (func := getattr(self, "_" + self.path.lstrip("/")), None) is not None:
-            func()
+        data = self._parse_data()
+        if data is None:
+            self.send_error(400, "Invalid JSON")
+            return
+        logging.info(data)
+
+        if self.path == "/log":
+            self._log(data)
+        else:
+            self.nvim.async_call(lambda: self.mod._H.callback(data))
+            self.wfile.write(json.dumps({"status": "ok", "msg": "data已收到"}).encode("utf-8"))
+
 
 @pynvim.plugin
 class Bite:
