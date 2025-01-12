@@ -191,7 +191,7 @@ function play(data) {
 }
 
 function toggle() {
-  let btn = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.btns-play > svg:nth-child(4)")
+  let btn = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.btns-play > svg:nth-child(3)")
   btn.dispatchEvent(clickEvent)
 }
 
@@ -201,6 +201,7 @@ function back(data) {
   for (let i = 1; i <= count; i++) {
     btn.dispatchEvent(clickEvent)
   }
+  nvim_log(`已后退${count}秒`);
 }
 
 function init_transcripts() {
@@ -292,8 +293,8 @@ function fetch_slice(data) {
 }
 
 function fetch_progress(data) {
-  let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
-  let x = String(wave.querySelector("wave").getBoundingClientRect().right);
+  let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave > wave");
+  let x = String(wave.getBoundingClientRect().right);
   let ret = {x: x, callback: data["callback"]}
   fetch('http://127.0.0.1:9001/fetch_progress', {
     method: "POST",
@@ -320,7 +321,7 @@ function push_slice(data) {
       section_edge_pos1[section]["end"] === section_edge_pos2[section]["end"]
     ) {ok = true; break;}
   }
-  if (!ok) {nvim_log("设置边界失败，原位置时间比已变更，请重新设置", "ERROR"); fetch_slice(); return;}
+  if (!ok) {nvim_log("设置边界失败，原位置时间比已变更，请重新设置", "ERROR"); fetch_slice({callback: "callback_receive_slice"}); return;}
 
   let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
   let region = wave.querySelector(`region[data-id="${section}"]`);

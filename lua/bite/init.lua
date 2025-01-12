@@ -308,12 +308,12 @@ end
 _H.callback_dict2buf = function(data, buf)
   if buf == nil then buf = 0 end
   local subsections = {
-    "人工英文转写结果",
     "人工英文断句结果",
-    "人工同传中文结果",
-    "人工同传中文断句结果",
-    "人工英文顺滑结果",
     "人工英文顺滑断句结果",
+    "人工同传中文断句结果",
+    "人工英文转写结果",
+    "人工英文顺滑结果",
+    "人工同传中文结果",
   }
 
   local lines = {}
@@ -392,10 +392,24 @@ _H.callback = function(data)
 end
 
 ---@param section string
----@param subsection string
+---@param subsection string|nil
 _H.jump_to = function(section, subsection)
   vim.fn.search(string.format("^# %s$", section), "cw")
-  vim.fn.search(string.format("^## %s$", subsection), "cW")
+  if subsection ~= nil then
+    vim.fn.search(string.format("^## %s$", subsection), "cW")
+  end
+end
+
+_H.create_scratch = function(lines)
+  vim.cmd([[botright split | setlocal winfixheight | resize ]] .. vim.o.cmdwinheight)
+  local bufnr = vim.api.nvim_create_buf(true, true)
+  vim.api.nvim_buf_set_name(bufnr, "bite://" .. tostring(bufnr))
+  vim.api.nvim_set_current_buf(bufnr)
+  vim.bo[bufnr].bufhidden = "wipe"
+  vim.bo[bufnr].buftype = "nowrite"
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+  vim.bo[bufnr].modifiable = false
+  return bufnr, vim.api.nvim_get_current_win()
 end
 
 local lt
@@ -422,14 +436,7 @@ M.cmd.lint = function()
   end
 
   local origwinid = vim.api.nvim_get_current_win()
-  vim.cmd([[botright split | resize ]] .. vim.o.cmdwinheight)
-  local bufnr = vim.api.nvim_create_buf(true, true)
-  vim.api.nvim_buf_set_name(bufnr, "bite://" .. tostring(bufnr))
-  vim.api.nvim_set_current_buf(bufnr)
-  vim.bo[bufnr].bufhidden = "wipe"
-  vim.bo[bufnr].buftype = "nowrite"
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, errors)
-  vim.bo[bufnr].modifiable = false
+  _H.create_scratch(errors)
 
   local jump = function()
     local line = vim.api.nvim_get_current_line()
@@ -442,6 +449,44 @@ M.cmd.lint = function()
   vim.keymap.set("n", "<enter>", jump, { silent = true, buffer = true, nowait = true, noremap = true })
 end
 
+M.cmd.outline = function()
+  if M._outline_winid ~= nil then
+    vim.api.nvim_set_current_win(M._outline_winid)
+    return
+  end
+
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local sections = {}
+  local n
+  for _, line in ipairs(lines) do
+    n = line:match "^# (%d+)"
+    if n ~= nil then
+      table.insert(sections, n)
+    end
+  end
+
+  local origwinid = vim.api.nvim_get_current_win()
+  local cursection = _H.get_curr_section_nr()
+  local bufnr, winid = _H.create_scratch(sections)
+  M._outline_winid = winid
+  if cursection ~= nil then vim.fn.search(string.format("^%s$", cursection)) end
+
+  local jump = function()
+    local section = vim.api.nvim_get_current_line()
+    vim.api.nvim_set_current_win(origwinid)
+    _H.jump_to(section)
+  end
+
+  autocmd("BufUnload",
+    {
+      buffer = bufnr,
+      group = augroup("bite", { clear = true }),
+      callback = function() M._outline_winid = nil end,
+    })
+
+  vim.keymap.set("n", "<enter>", jump,
+    { silent = true, buffer = true, nowait = true, noremap = true })
+end
 
 local opt = { buffer = true, nowait = true, noremap = true }
 M.config = {
@@ -458,12 +503,13 @@ M.config = {
     { "n", "<left>", M.cmd.back, opt },
     { "n", "gI", M.cmd.init_transcripts, opt },
     { "n", "<c-s-h>", vim.fn["BiteToggleServer"], opt },
-    { "n", "g<enter>", _H.push_currline_slice, opt },
+    { "n", "<s-enter>", _H.push_currline_slice, opt },
     { "n", "<leader><enter>", M.cmd.fetch_slice, opt },
     { "n", "<up>", function() M.cmd.speed(1) end, opt },
     { "n", "<down>", function() M.cmd.speed(-1) end, opt },
     { "n", "[b", function() vim.fn.search([[【\?｜】\?]], "b") end, opt },
     { "n", "]b", function() vim.fn.search [[【\?｜】\?]] end, opt },
+    { "n", "gO", M.cmd.outline, opt },
   }
 }
 
