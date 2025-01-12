@@ -43,37 +43,6 @@ _H.append_switch_sep = function()
   end
 end
 
-_H.new_section = function()
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local section
-  for i = #lines, 1, -1 do
-    section = lines[i]:match "^# (%d+)"
-    if section ~= nil then
-      section = tonumber(section); break
-    end
-  end
-  if section == nil then section = 0 end
-
-  vim.api.nvim_buf_set_lines(0, -1, -1, false, {
-    "",
-    string.format("# %d", section + 1),
-    "",
-    "## 人工英文转写结果",
-    "",
-    "## 人工英文断句结果",
-    "",
-    "## 人工同传中文结果",
-    "",
-    "## 人工同传中文断句结果",
-    "",
-    "## 人工英文顺滑结果",
-    "",
-    "## 人工英文顺滑断句结果",
-    "",
-  })
-  vim.fn.cursor(#lines + 4, 1)
-end
-
 _H.prev_subsection = function()
   vim.fn.search("^## ", "bW")
   vim.fn.search("^[^#[]", "bW")
@@ -479,7 +448,6 @@ M.config = {
   keymaps = {
     { "n", "<bar>", _H.append_plain_sep, opt },
     { "n", "<c-bar>", _H.append_switch_sep, opt },
-    { "n", "<c-n>", _H.new_section, opt },
     { "n", "{", _H.prev_subsection, opt },
     { "n", "}", _H.next_subsection, opt },
     { "n", "[[", _H.prev_section, opt },
