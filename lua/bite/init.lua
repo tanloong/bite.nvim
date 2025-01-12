@@ -12,14 +12,38 @@ local M = {
   cmd = {},
 }
 
-M.append_plain_sep = function()
+_H.append_plain_sep = function()
   vim.api.nvim_put({ "｜" }, "c", true, true)
 end
-M.append_switch_sep = function()
-  vim.api.nvim_put({ "【｜】" }, "c", true, true)
+
+---如果光标在｜上，则在其两侧添加【】，如果不在｜上，在光标右侧插入【｜】
+_H.append_switch_sep = function()
+  ---Accepts pos args given by nvim_win_get_cursor(), used by _H.append_switch_sep()
+  ---@param row integer 1-based
+  ---@param col integer 0-based
+  local get_char_right_of_pos = function(row, col)
+    -- 获取当前行的内容
+    local line = vim.api.nvim_buf_get_lines(0, row - 1, row, false)[1]
+    -- 将字节索引转换为 UTF-8 字符索引
+    local char_idx = vim.str_utfindex(line, col)
+    -- 获取光标右侧的第一个字符
+    local next_char = vim.fn.strcharpart(line, char_idx, 1)
+    -- 如果光标已经在行尾时 next_char 会是 ""
+    return next_char
+  end
+
+  -- row is 1-based
+  local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+  vim.print(get_char_right_of_pos(row, col))
+  if get_char_right_of_pos(row, col) ~= "｜" then
+    vim.api.nvim_put({ "【｜】" }, "c", true, true)
+  else
+    vim.api.nvim_put({ "【" }, "c", false, true)
+    vim.api.nvim_put({ "】" }, "c", true, true)
+  end
 end
 
-M.new_section = function()
+_H.new_section = function()
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   local section
   for i = #lines, 1, -1 do
@@ -50,19 +74,19 @@ M.new_section = function()
   vim.fn.cursor(#lines + 4, 1)
 end
 
-M.prev_subsection = function()
+_H.prev_subsection = function()
   vim.fn.search("^## ", "bW")
   vim.fn.search("^[^#[]", "bW")
 end
-M.next_subsection = function()
+_H.next_subsection = function()
   vim.fn.search("^## ", "W")
   vim.fn.search("^[^#[]", "W")
 end
-M.prev_section = function()
+_H.prev_section = function()
   vim.fn.search("^# ", "bW")
 end
 
-M.next_section = function()
+_H.next_section = function()
   vim.fn.search("^# ", "W")
 end
 
@@ -108,7 +132,7 @@ _H.diff_lines = function(line1, line2, bufname1, bufname2)
   vim.api.nvim_set_current_buf(buf2)
   vim.cmd [[diffthis]]
 end
-M.diff_orig_smth = function()
+_H.diff_orig_smth = function()
   local line_orig, line_smooth
   local found_orig = false
   local found_smooth = false
@@ -389,6 +413,7 @@ end
 
 _H.callback = function(data)
   local func = _H[data.callback]
+  if func == nil then func = M.cmd[data.callback] end
   if func == nil then
     vim.notify("找不到回调函数: " .. data.callback, vim.log.levels.ERROR)
     return
@@ -397,18 +422,70 @@ _H.callback = function(data)
   func(data)
 end
 
+---@param section string
+---@param subsection string
+_H.jump_to = function(section, subsection)
+  vim.fn.search(string.format("^# %s$", section), "cw")
+  vim.fn.search(string.format("^## %s$", subsection), "cW")
+end
+
+local lt
+M.cmd.lint = function()
+  lt = lt or require "bite.lint"
+  local ok, msg
+  local errors = {}
+
+  local dict = _H.buf2dict "0"
+  if dict == nil then return end
+  for section, subsection_line in pairs(dict) do
+    for subsection, line in pairs(subsection_line) do
+      repeat
+        if line:match "^%s*$" then break end
+        if lt[subsection] == nil then break end
+        ok, msg = lt[subsection](line)
+        if ok then break end
+        table.insert(errors, string.format("%s:%s:\t%s", section, subsection, msg))
+      until true
+    end
+  end
+  if next(errors) == nil then
+    vim.notify("Pass!", vim.log.levels.INFO); return
+  end
+
+  local origwinid = vim.api.nvim_get_current_win()
+  vim.cmd([[botright split | resize ]] .. vim.o.cmdwinheight)
+  local bufnr = vim.api.nvim_create_buf(true, true)
+  vim.api.nvim_buf_set_name(bufnr, "bite://" .. tostring(bufnr))
+  vim.api.nvim_set_current_buf(bufnr)
+  vim.bo[bufnr].bufhidden = "wipe"
+  vim.bo[bufnr].buftype = "nowrite"
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, errors)
+  vim.bo[bufnr].modifiable = false
+
+  local jump = function()
+    local line = vim.api.nvim_get_current_line()
+    local section = line:match [[^([^:]+)]]
+    local subsection = line:match [[^[^:]+:([^:]+)]]
+    vim.api.nvim_set_current_win(origwinid)
+    _H.jump_to(section, subsection)
+  end
+
+  vim.keymap.set("n", "<enter>", jump, { silent = true, buffer = true, nowait = true, noremap = true })
+end
+
+
 local opt = { buffer = true, nowait = true, noremap = true }
 M.config = {
   keymaps = {
-    { "n", "<bar>", M.append_plain_sep, opt },
-    { "n", "<c-bar>", M.append_switch_sep, opt },
-    { "n", "<c-n>", M.new_section, opt },
-    { "n", "{", M.prev_subsection, opt },
-    { "n", "}", M.next_subsection, opt },
-    { "n", "[[", M.prev_section, opt },
-    { "n", "]]", M.next_section, opt },
-    { "n", "<c-t>", M.diff_orig_smth, opt },
-    { "n", "gp", M.cmd.play, opt },
+    { "n", "<bar>", _H.append_plain_sep, opt },
+    { "n", "<c-bar>", _H.append_switch_sep, opt },
+    { "n", "<c-n>", _H.new_section, opt },
+    { "n", "{", _H.prev_subsection, opt },
+    { "n", "}", _H.next_subsection, opt },
+    { "n", "[[", _H.prev_section, opt },
+    { "n", "]]", _H.next_section, opt },
+    { "n", "<c-t>", _H.diff_orig_smth, opt },
+    { "n", "<enter>", M.cmd.play, opt },
     { "n", "<space>", M.cmd.toggle, opt },
     { "n", "<left>", M.cmd.back, opt },
     { "n", "gI", M.cmd.init_transcripts, opt },
