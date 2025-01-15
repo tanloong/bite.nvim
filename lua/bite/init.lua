@@ -160,6 +160,17 @@ _H.get_curr_section_nr = function()
   return vim.fn.getline(section_lineno):match "^# (%d+)"
 end
 
+---@return string|nil
+_H.get_curr_subsection_name = function()
+  local subsection_lineno = vim.fn.search("^## ", "cbWn")
+  local section_lineno = vim.fn.search("^# ", "cbWn")
+  if subsection_lineno == 0 or section_lineno > subsection_lineno then
+    vim.notify("Not in a subsection!", vim.log.levels.ERROR)
+    return
+  end
+  return vim.fn.getline(subsection_lineno):match "^## (%S+)"
+end
+
 ---Converts the n-th section to into dict. Converts all sections if n <= 0 or n > last_section.
 ---@param n string|nil
 _H.buf2dict = function(n)
@@ -308,10 +319,10 @@ end
 _H.callback_dict2buf = function(data, buf)
   if buf == nil then buf = 0 end
   local subsections = {
+    "人工英文转写结果",
     "人工英文断句结果",
     "人工英文顺滑断句结果",
     "人工同传中文断句结果",
-    "人工英文转写结果",
     "人工英文顺滑结果",
     "人工同传中文结果",
   }
@@ -488,6 +499,37 @@ M.cmd.outline = function()
     { silent = true, buffer = true, nowait = true, noremap = true })
 end
 
+---1. 在“人工英文转写结果”添加语气词等和sep，将光标移动到“人工英文断句结果”，执行此函数会引用转写内容并删除转写中的sep
+---2. 光标移动到“人工英文顺滑断句结果”，执行此函数会引用“人工英文断句结果”
+---3. 编辑好“人工同传中文断句结果”
+---4. 光标移动到“人工英文顺滑结果”，执行此函数会引用“人工英文顺滑断句结果”并删除其中的sep
+---5. 光标移动到“人工同传中文结果”，执行此函数会引用“人工同传中文断句结果”并删除其中的sep
+---4、5两条可不手动操作，执行B lint时如果两个subsection为空则执行引用
+M.cmd.reference = function()
+  local n = _H.get_curr_section_nr()
+  if n == nil then return end
+  local name = _H.get_curr_subsection_name()
+  if name == nil then return end
+  local dict = _H.buf2dict "0"
+  if dict == nil then return end
+
+  if name == "人工英文断句结果" then
+    dict[n][name] = dict[n]["人工英文转写结果"]
+    dict[n]["人工英文转写结果"] = vim.fn.substitute(dict[n]["人工英文转写结果"], "\\v【?｜】?", "", "g")
+  elseif name == "人工英文顺滑断句结果" then
+    dict[n][name] = dict[n]["人工英文断句结果"]
+  elseif name == "人工英文顺滑结果" then
+    dict[n][name] = vim.fn.substitute(dict[n]["人工英文顺滑断句结果"], "\\v【?｜】?", "", "g")
+  elseif name == "人工同传中文结果" then
+    dict[n][name] = vim.fn.substitute(dict[n]["人工同传中文断句结果"], "\\v【?｜】?", "", "g")
+  else
+    vim.notify("Invalid subsection name: " .. name, vim.log.levels.ERROR)
+    return
+  end
+
+  _H.callback_dict2buf(dict)
+end
+
 local opt = { buffer = true, nowait = true, noremap = true }
 M.config = {
   keymaps = {
@@ -510,6 +552,7 @@ M.config = {
     { "n", "[b", function() vim.fn.search([[【\?｜】\?]], "b") end, opt },
     { "n", "]b", function() vim.fn.search [[【\?｜】\?]] end, opt },
     { "n", "gO", M.cmd.outline, opt },
+    { "n", "gp", M.cmd.reference, opt },
   }
 }
 
@@ -557,7 +600,6 @@ M.cmd.disable_keybindings = function()
 
   _H.warn_invalid_sep(false)
 end
-
 
 vim.api.nvim_create_user_command("B", function(a)
   ---@type string[]
