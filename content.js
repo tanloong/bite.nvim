@@ -28,6 +28,7 @@ function close_sse() {
   button2.textContent = 'Listen Editor';
   button2.style.backgroundColor = '#007bff';
 
+  sendNotification('编辑器断连')
   console.log('SSE connection closed.');
 }
 
@@ -105,6 +106,7 @@ function toggle_sse() {
     isListening = true;
     button2.textContent = 'Stop Listening';
     button2.style.backgroundColor = '#dc3545';
+    sendNotification("已连接到编辑器")
     console.log('SSE connection established.');
   }
 }
@@ -133,7 +135,7 @@ const clickEvent = new Event('click', {
 });
 
 function editor2browser(data) {
-  let root = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(3) > div")
+  let root = get_root()
   var section, subsection, section_head, section_body, section_tail, label, containers, elem
   // 创建一个 input 事件
   for (let i = 0; i < root.children.length; i++) {
@@ -167,17 +169,7 @@ function nvim_log(msg, level = "INFO") {
 }
 
 function play(data) {
-  //let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
-  //let region = wave.querySelector(`region[data-id="${data['section']}"]`);
-  //console.log(region);
-  //region.dispatchEvent(clickEvent);
-  //let btns = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.btns-play")
-  //let btn = btns.querySelector("[id^='play-slice_svg']")
-  //if (btn === null) {
-  //  btn = btns.querySelector("svg:nth-child(4)")
-  //}
-  //btn.dispatchEvent(clickEvent);
-  let root = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(3) > div")
+  let root = get_root()
   var section, subsection, section_head, section_body, section_tail, label, containers, elem
   for (let i = 0; i < root.children.length; i++) {
     section = root.children[i].children[0];
@@ -192,11 +184,17 @@ function play(data) {
 
 function toggle() {
   let btn = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.btns-play > svg:nth-child(3)")
+  if (btn === null) {
+    btn = document.querySelector("body > div:nth-child(10) > div.arco-modal-wrapper.arco-modal-wrapper-align-center > div > div > div > div > div > div.side-wrap_HG1nN9CV > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.btns-play > svg:nth-child(3)")
+  }
   btn.dispatchEvent(clickEvent)
 }
 
 function back(data) {
   let btn = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.btns-play > svg:nth-child(2)")
+  if (btn === null) {
+    btn = document.querySelector("body > div:nth-child(10) > div.arco-modal-wrapper.arco-modal-wrapper-align-center > div > div > div > div > div > div.side-wrap_HG1nN9CV > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.btns-play > svg:nth-child(2)")
+  }
   let count = Number(data['count'])
   for (let i = 1; i <= count; i++) {
     btn.dispatchEvent(clickEvent)
@@ -205,7 +203,7 @@ function back(data) {
 }
 
 function init_transcripts() {
-  let root = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(3) > div")
+  let root = get_root()
   var section, subsection, section_head, section_body, section_tail, label, containers, elem, btn
   for (let i = 0; i < root.children.length; i++) {
     section = root.children[i].children[0];
@@ -217,9 +215,26 @@ function init_transcripts() {
   fetch_content();
 }
 
-function fetch_content(data) {
+function get_root() {
   let root = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(3) > div")
+  if (root === null) {
+    // 质检页面，如 https://aidp.bytedance.com/operation/task-v2/7455241299210948352/node/14/package/item/7460090930487201573?status=0&query=&page=1
+    root = document.querySelector("body > div:nth-child(10) > div.arco-modal-wrapper.arco-modal-wrapper-align-center > div > div > div > div > div > div.side-wrap_HG1nN9CV > div > div > div > div > div > div:nth-child(3) > div")
+  }
+  return root
+}
+function get_wave() {
   let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
+  if (wave === null) {
+    // 质检页面，如 https://aidp.bytedance.com/operation/task-v2/7455241299210948352/node/14/package/item/7460090930487201573?status=0&query=&page=1
+    wave = document.querySelector("body > div:nth-child(10) > div.arco-modal-wrapper.arco-modal-wrapper-align-center > div > div > div > div > div > div.side-wrap_HG1nN9CV > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave")
+  }
+  return wave
+}
+
+function fetch_content(data) {
+  let root = get_root()
+  let wave = get_wave()
   var section, subsection, section_head, section_body, section_tail, label, containers, elem
   let ret = {}
   for (let i = 0; i < root.children.length; i++) {
@@ -267,7 +282,7 @@ function fetch_content(data) {
 function _fetch_slice() {
   let ret = {}
 
-  let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
+  let wave = get_wave()
   let regions = wave.querySelectorAll("region");
   for (let i = 0; i < regions.length; i++) {
     let region = regions[i]
@@ -293,7 +308,7 @@ function fetch_slice(data) {
 }
 
 function fetch_progress(data) {
-  let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave > wave");
+  let wave = get_wave()
   let x = String(wave.getBoundingClientRect().right);
   let ret = {x: x, callback: data["callback"]}
   fetch('http://127.0.0.1:9001/fetch_progress', {
@@ -323,7 +338,7 @@ function push_slice(data) {
   }
   if (!ok) {nvim_log("设置边界失败，原位置时间比已变更，请重新设置", "ERROR"); fetch_slice({callback: "callback_receive_slice"}); return;}
 
-  let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
+  let wave = get_wave()
   let region = wave.querySelector(`region[data-id="${section}"]`);
   let handle = region.querySelector(`handle.waver-handle.waver-handle-${edge}`);
   let rect_handle = handle.getBoundingClientRect();
@@ -343,6 +358,10 @@ function push_slice(data) {
 function speed(data) {
   let offset = Number(data["offset"])
   let combobox = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.container-speed > div.arco-select.arco-select-single.arco-select-size-default")
+  if (combobox === null) {
+    // 质检页面
+    combobox = document.querySelector("body > div:nth-child(10) > div.arco-modal-wrapper.arco-modal-wrapper-align-center > div > div > div > div > div > div.side-wrap_HG1nN9CV > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.container-speed > div.arco-select.arco-select-single.arco-select-size-default")
+  }
   let before = combobox.querySelector("span[class='arco-select-view-value']").textContent.trim()
   let after = null
 
@@ -352,6 +371,8 @@ function speed(data) {
     combobox.dispatchEvent(clickEvent);
     popup = document.querySelector("#arco-select-popup-0 > div > div")
   }
+  // 质检页面
+  if (popup === null) {popup = document.querySelector("#arco-select-popup-4 > div > div")}
   if (popup === null) {nvim_log("倍速失败，找不到下拉菜单", "ERROR"); return };
 
   let choices = popup.querySelectorAll("li")
@@ -373,4 +394,54 @@ function speed(data) {
   // 若下拉菜单未关闭，将其关闭
   popup = document.querySelector("#arco-select-popup-0 > div > div")
   if (popup !== null) {combobox.dispatchEvent(clickEvent);};
+  popup = document.querySelector("#arco-select-popup-4 > div > div")
+  if (popup !== null) {combobox.dispatchEvent(clickEvent);};
+}
+
+//////////////////////////////////NOTIFICATION//////////////////////////////////
+
+// https://segmentfault.com/a/1190000041982599
+function sendNotification(title, body, icon, callback) {
+  // 先检查浏览器是否支持
+  if (!('Notification' in window)) {
+    // IE浏览器不支持发送Notification通知!
+    return;
+  }
+
+  if (Notification.permission === 'denied') {
+    // 如果用户已拒绝显示通知
+    return;
+  }
+
+  if (Notification.permission === 'granted') {
+    //用户已授权，直接发送通知
+    notify();
+  } else {
+    // 默认，先向用户询问是否允许显示通知
+    Notification.requestPermission(function (permission) {
+      // 如果用户同意，就可以直接发送通知
+      if (permission === 'granted') {
+        notify();
+      }
+    });
+  }
+
+  function notify() {
+    let notification = new Notification(title, {
+      icon: icon,
+      body: body
+    });
+    notification.onclick = function () {
+      callback && callback();
+      //console.log('单击通知框')
+    }
+    //notification.onclose = function () {
+    //  console.log('关闭通知框');
+    //};
+
+    // 设置1秒后自动关闭通知
+    setTimeout(() => {
+      notification.close();
+    }, 1000); // 1000毫秒 = 1秒
+  }
 }
