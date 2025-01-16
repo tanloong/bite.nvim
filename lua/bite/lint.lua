@@ -8,104 +8,104 @@ local M = {
 }
 
 ---@param s string
----@return boolean, string|nil
-_H.common = function(s)
-  local m = vim.fn.matchstr(s, "  ")
-  if m ~= "" then return false, "连续多个空格" end
-  return true, nil
-end
-
----@param s string
----@return boolean, string|nil
-_H.cmn_ungrouped = function(s)
-  local m, msg, pat
-  for _, pat_msg in ipairs {
-    { [[｜]], "非断句出现'｜'" },
-  } do
+---@param rules table
+_H.lint_helper = function(s, rules)
+  local ret = {}
+  for _, pat_msg in ipairs(rules) do
     pat, msg = unpack(pat_msg)
     m = vim.fn.matchstr(s, pat)
-    if m ~= "" then return false, string.format("%s\t%s", msg, m) end
+    if m ~= "" then table.insert(ret, string.format("%s\t%s", msg, m)) end
   end
-  return true, nil
+  return ret
 end
 
 ---@param s string
----@return boolean, string|nil
+---@return string[]
+_H.common = function(s)
+  return _H.lint_helper(s,
+    {
+      { [[  ]], "连续多个空格" },
+      { [[\v^\s]], "行首空格" },
+    }
+  )
+end
+
+---@param s string
+---@return string[]
+_H.cmn_ungrouped = function(s)
+  return _H.lint_helper(s,
+    {
+      { [[｜]], "非断句出现'｜'" },
+    }
+  )
+end
+
+---@param s string
+---@return string[]
 _H.cmn_grouped = function(s)
-  local m, msg, pat
-  for _, pat_msg in ipairs {
+  local ret = _H.lint_helper(s, {
     { [[\v【?丨】?]], "sep 符号错误" },
     { "\\v[[:blank:]]%(【?｜】?)@=", "sep 符号左边有空白字符" },
-  } do
-    pat, msg = unpack(pat_msg)
-    m = vim.fn.matchstr(s, pat)
-    if m ~= "" then return false, string.format("%s\t%s", msg, m) end
-  end
-  if vim.fn.match(s, "｜") == -1 then return false, "断句无'｜'" end
-  return true, nil
+    { "\\v^\\s*【?｜】?", "行首 sep 符号应放在上一区间行尾" },
+  })
+  if vim.fn.match(s, "｜") == -1 then table.insert(ret, "断句无'｜'") end
+  return ret
 end
 
 ---@param s string
----@return boolean, string|nil
+---@return string[]
 _H.zh_grouped = function(s)
-  local m, msg, pat
-  for _, pat_msg in ipairs {
+  return _H.lint_helper(s, {
     { "\\v%([，。？！：”’—…]【?｜】?)@<=[[:blank:]]", "中文 sep 符号右边不能有空格" },
-  } do
-    pat, msg = unpack(pat_msg)
-    m = vim.fn.matchstr(s, pat)
-    if m ~= "" then return false, string.format("%s\t%s", msg, m) end
-  end
-  return true, nil
+  })
 end
 
 ---@param s string
----@return boolean, string|nil
+---@return string[]
 _H.en_grouped = function(s)
-  local m, msg, pat
-  for _, pat_msg in ipairs {
-    { "\\v%([[:punct:][:alnum:]]【?｜】?)@<=[[:alnum:]]", "英文 sep 符号右边需有空格" },
-  } do
-    pat, msg = unpack(pat_msg)
-    m = vim.fn.matchstr(s, pat)
-    if m ~= "" then return false, string.format("%s\t%s", msg, m) end
-  end
-  return true, nil
+  return _H.lint_helper(s, {
+    { "\\v%([[:punct:][:alnum:]]【?｜】?)@<=[[:alnum:]]", "英文 sep 符号右边缺空格" },
+  })
 end
 
+---@param s string
+---@return string[]
 _H.en_smoothed = function(s)
-  local m, msg, pat
-  for _, pat_msg in ipairs {
+  return _H.lint_helper(s, {
     {
       "\\v<%(ah|aha|ahem|ahh|ahhh|alas|argh|aw|aya|eeek|eek|eh|er|ew|eww|ey|gee|geez|god|gosh|ha|ha|ha|ha|ha|ha|hah|hey|hm|hmm|hmmm|hmmmm|hoo|hoorah|hooray|huh|hurrah|hurray|jah|jeez|muah|mwa|mwah|nah|no|oh|ooh|oooops|ooops|oops|ouch|ow|phew|sh|sheesh|shh|shir|shoo|ugh|uh|uh-huh|uhm|um|umm|well|whoa|whoo|wow|ya|yahoo|ye|yeah|yo|yoo|yoo-hoo|yuck|you know|ok|okay)>\\C",
-      "顺滑出现语气词" }
-  } do
-    pat, msg = unpack(pat_msg)
-    m = vim.fn.matchstr(s, pat)
-    if m ~= "" then return false, string.format("%s\t%s", msg, m) end
-  end
-  return true, nil
+      "顺滑出现语气词" },
+    {
+      "\\v<%(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|trillion)\\C",
+      "英文数字考虑顺滑为阿拉伯数字"
+    }
+  })
 end
 
-
+---@param s string
+---@return string[]
 _H.en_orig = function(s)
-  local m, msg, pat
-  for _, pat_msg in ipairs {
+  return _H.lint_helper(s, {
     {
       "\\v[0-9]+",
       "转写的数字应采用英文形式" }
-  } do
-    pat, msg = unpack(pat_msg)
-    m = vim.fn.matchstr(s, pat)
-    if m ~= "" then return false, string.format("%s\t%s", msg, m) end
-  end
-  return true, nil
+  })
 end
 
----@return boolean, string|nil
-_H.zh_number = function(s) -- {{{
-  local pat, msg, col
-  for _, pat_msg in ipairs {
+---@param s string
+---@return string[]
+_H.cmn_en = function(s)
+  return _H.lint_helper(s, {
+    {
+      "\\v\\([^)]+\\)",
+      "疑似笑声" }
+  })
+end
+
+---@param s string
+---@return string[]
+_H.cmn_zh = function(s) -- {{{
+  return _H.lint_helper(s, {
     -- 中文与数字、字母之间要有空格
     { "\\v[^ [:alnum:][:punct:]｜【】《》，。？！：“”‘’—…][[:alnum:]]",
       "中文右边是数字、字母时要加空格" },
@@ -130,12 +130,10 @@ _H.zh_number = function(s) -- {{{
     -- 时间点、时间段用汉字，如三点四十、二十六分四十二秒
     { [[\v\d+\s*[时点][零一二三四五六七八九十0-9 ]+分?|\d+\s*分[零一二三四五六七八九十0-9 ]+秒?|分\s*\d+\s*秒]],
       "时间点、时间段须用汉字，如三点四十，二十六分四十二秒" },
-  } do
-    pat, msg = unpack(pat_msg)
-    col = vim.fn.match(s, pat)
-    if col >= 0 then return false, msg end
-  end
-  return true, nil
+    {
+      "\\v[（(][^)]+[）)]",
+      "增补无需括号" }
+  })
 end -- }}}
 
 --- TODO: 区间末尾是句子边界时要有分隔符，｜或【｜】
@@ -190,38 +188,37 @@ end
 
 ---@param s string
 ---@param funcs function[]
----@return boolean, string|nil
+---@return string[]
 _H.lint = function(s, funcs)
-  local ok, msg
+  local ret = {}
   for _, func in ipairs(funcs) do
-    ok, msg = func(s)
-    if not ok then return ok, msg end
+    vim.list_extend(ret, func(s))
   end
-  return true, nil
+  return ret
 end
 
 ---@param s string
 _H["人工英文转写结果"] = function(s)
-  return _H.lint(s, { _H.common, _H.cmn_ungrouped, _H.en_orig })
+  return _H.lint(s, { _H.common, _H.cmn_ungrouped, _H.cmn_en, _H.en_orig })
 end
 
 _H["人工英文断句结果"] = function(s)
-  return _H.lint(s, { _H.common, _H.cmn_grouped, _H.en_grouped })
+  return _H.lint(s, { _H.common, _H.cmn_grouped, _H.cmn_en, _H.en_grouped, _H.en_orig })
 end
 
 _H["人工同传中文结果"] = function(s)
-  return _H.lint(s, { _H.common, _H.cmn_ungrouped, _H.zh_number })
+  return _H.lint(s, { _H.common, _H.cmn_ungrouped, _H.cmn_zh })
 end
 
 _H["人工同传中文断句结果"] = function(s)
-  return _H.lint(s, { _H.common, _H.zh_number, _H.zh_grouped })
+  return _H.lint(s, { _H.common, _H.cmn_grouped, _H.cmn_zh, _H.zh_grouped })
 end
 
 _H["人工英文顺滑结果"] = function(s)
-  return _H.lint(s, { _H.common, _H.cmn_ungrouped, _H.en_smoothed })
+  return _H.lint(s, { _H.common, _H.cmn_ungrouped, _H.cmn_en, _H.en_smoothed })
 end
 _H["人工英文顺滑断句结果"] = function(s)
-  return _H.lint(s, { _H.common, _H.cmn_grouped, _H.en_grouped, _H.en_smoothed })
+  return _H.lint(s, { _H.common, _H.cmn_grouped, _H.cmn_en, _H.en_grouped, _H.en_smoothed })
 end
 
 ---@return boolean, string|nil
@@ -238,6 +235,11 @@ end
 ---@param dict table
 ---@return string[]
 M.lint = function(dict)
+  local grpd_ungrpd = {
+    ["人工英文断句结果"] = "人工英文转写结果",
+    ["人工同传中文断句结果"] = "人工同传中文结果",
+    ["人工英文顺滑断句结果"] = "人工英文顺滑结果"
+  }
   local ret = {}
   local ok, msg
 
@@ -246,11 +248,12 @@ M.lint = function(dict)
       repeat
         if line:match "^%s*$" then break end
         if _H[subsection] == nil then break end
-        ok, msg = _H[subsection](line)
-        if ok then break end
-        table.insert(ret, string.format("%s:%s:\t%s", section, subsection, msg))
+        for _, _msg in ipairs(_H[subsection](line)) do
+          table.insert(ret, string.format("%s:%s:\t%s", section, subsection, _msg))
+        end
+        -- 断句前后文本需一致
         if subsection:match "断句" then
-          ok, msg = _H.cmpr_ungrpd_grpd(subsection_line[subsection:gsub("断句", "")], line)
+          ok, msg = _H.cmpr_ungrpd_grpd(subsection_line[grpd_ungrpd[subsection]], line)
           if not ok then
             table.insert(ret, string.format("%s:%s:\t%s", section, subsection, msg))
           end

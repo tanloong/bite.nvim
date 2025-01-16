@@ -586,6 +586,12 @@ M.cmd.diff_group = function()
     "人工同传中文结果" })
   local dict_grped = _H.filter_dict_subsection(dict, { "人工英文断句结果", "人工英文顺滑断句结果",
     "人工同传中文断句结果" })
+  -- 删除断句的 sep 符号
+  for _, subsection_line in pairs(dict_grped) do
+    for subsection, line in pairs(subsection_line) do
+      subsection_line[subsection] = vim.fn.substitute(line, "\\v【?｜】?", "", "g")
+    end
+  end
   _H.diff_dicts(dict_ungrped, dict_grped, "未断句", "断句")
 end
 
