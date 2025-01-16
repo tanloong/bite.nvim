@@ -302,12 +302,12 @@ end
 _H.callback_dict2buf = function(data, buf)
   if buf == nil then buf = 0 end
   local subsections = {
-    "人工英文转写结果",
     "人工英文断句结果",
     "人工英文顺滑断句结果",
     "人工同传中文断句结果",
     "人工英文顺滑结果",
     "人工同传中文结果",
+    "人工英文转写结果",
   }
 
   local lines = {}
@@ -511,6 +511,24 @@ M.cmd.reference = function()
   else
     vim.notify("Invalid subsection name: " .. name, vim.log.levels.ERROR)
     return
+  end
+
+  _H.callback_dict2buf(dict)
+end
+
+M.cmd.ungroup = function()
+  local dict = _H.buf2dict "0"
+  if dict == nil then return end
+
+  for _, subsection_line in pairs(dict) do
+    subsection_line["人工英文转写结果"] = vim.fn.substitute(subsection_line["人工英文断句结果"],
+      "\\v【?｜】?", "", "g")
+    subsection_line["人工英文顺滑结果"] = vim.fn.substitute(subsection_line["人工英文顺滑断句结果"],
+      "\\v【?｜】?",
+      "", "g")
+    subsection_line["人工同传中文结果"] = vim.fn.substitute(subsection_line["人工同传中文断句结果"],
+      "\\v【?｜】?",
+      "", "g")
   end
 
   _H.callback_dict2buf(dict)

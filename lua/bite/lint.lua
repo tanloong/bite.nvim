@@ -87,6 +87,21 @@ _H.en_smoothed = function(s)
   return true, nil
 end
 
+
+_H.en_orig = function(s)
+  local m, msg, pat
+  for _, pat_msg in ipairs {
+    {
+      "\\v[0-9]+",
+      "转写的数字应采用英文形式" }
+  } do
+    pat, msg = unpack(pat_msg)
+    m = vim.fn.matchstr(s, pat)
+    if m ~= "" then return false, string.format("%s\t%s", msg, m) end
+  end
+  return true, nil
+end
+
 ---@return boolean, string|nil
 _H.zh_number = function(s) -- {{{
   local pat, msg, col
@@ -187,7 +202,7 @@ end
 
 ---@param s string
 _H["人工英文转写结果"] = function(s)
-  return _H.lint(s, { _H.common, _H.cmn_ungrouped })
+  return _H.lint(s, { _H.common, _H.cmn_ungrouped, _H.en_orig })
 end
 
 _H["人工英文断句结果"] = function(s)
