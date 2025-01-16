@@ -186,27 +186,65 @@ _H.lint = function(s, funcs)
 end
 
 ---@param s string
-M["人工英文转写结果"] = function(s)
+_H["人工英文转写结果"] = function(s)
   return _H.lint(s, { _H.common, _H.cmn_ungrouped })
 end
 
-M["人工英文断句结果"] = function(s)
+_H["人工英文断句结果"] = function(s)
   return _H.lint(s, { _H.common, _H.cmn_grouped, _H.en_grouped })
 end
 
-M["人工同传中文结果"] = function(s)
+_H["人工同传中文结果"] = function(s)
   return _H.lint(s, { _H.common, _H.cmn_ungrouped, _H.zh_number })
 end
 
-M["人工同传中文断句结果"] = function(s)
+_H["人工同传中文断句结果"] = function(s)
   return _H.lint(s, { _H.common, _H.zh_number, _H.zh_grouped })
 end
 
-M["人工英文顺滑结果"] = function(s)
+_H["人工英文顺滑结果"] = function(s)
   return _H.lint(s, { _H.common, _H.cmn_ungrouped, _H.en_smoothed })
 end
-M["人工英文顺滑断句结果"] = function(s)
+_H["人工英文顺滑断句结果"] = function(s)
   return _H.lint(s, { _H.common, _H.cmn_grouped, _H.en_grouped, _H.en_smoothed })
+end
+
+---@return boolean, string|nil
+_H.cmpr_ungrpd_grpd = function(ungrpd, grpd)
+  grpd = vim.fn.substitute(grpd, "\\v【?｜】?", "", "g")
+
+  if grpd ~= ungrpd then
+    return false, "断句前后文本不一致"
+  else
+    return true, nil
+  end
+end
+
+---@param dict table
+---@return string[]
+M.lint = function(dict)
+  local ret = {}
+  local ok, msg
+
+  for section, subsection_line in pairs(dict) do
+    for subsection, line in pairs(subsection_line) do
+      repeat
+        if line:match "^%s*$" then break end
+        if _H[subsection] == nil then break end
+        ok, msg = _H[subsection](line)
+        if ok then break end
+        table.insert(ret, string.format("%s:%s:\t%s", section, subsection, msg))
+        if subsection:match "断句" then
+          ok, msg = _H.cmpr_ungrpd_grpd(subsection_line[subsection:gsub("断句", "")], line)
+          if not ok then
+            table.insert(ret, string.format("%s:%s:\t%s", section, subsection, msg))
+          end
+        end
+      until true
+    end
+  end
+
+  return ret
 end
 
 return M

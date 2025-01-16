@@ -78,17 +78,17 @@ M.get_section_lines = function()
 end
 
 ---Diff two lines in two splits.
----@param line1 string
----@param line2 string
+---@param lines1 string[]
+---@param lines2 string[]
 ---@param bufname1 string
 ---@param bufname2 string
-_H.diff_lines = function(line1, line2, bufname1, bufname2)
+_H.diff_lines = function(lines1, lines2, bufname1, bufname2)
   vim.cmd [[belowright split]]
   local buf1 = vim.api.nvim_create_buf(true, true)
   vim.api.nvim_buf_set_name(buf1, bufname1)
   vim.bo[buf1].bufhidden = "wipe"
   vim.bo[buf1].buftype = "nowrite"
-  vim.api.nvim_buf_set_lines(buf1, 0, -1, true, { line1 })
+  vim.api.nvim_buf_set_lines(buf1, 0, -1, true, lines1)
   vim.api.nvim_set_current_buf(buf1)
   vim.cmd [[diffthis]]
 
@@ -97,26 +97,9 @@ _H.diff_lines = function(line1, line2, bufname1, bufname2)
   vim.api.nvim_buf_set_name(buf2, bufname2)
   vim.bo[buf2].bufhidden = "wipe"
   vim.bo[buf2].buftype = "nowrite"
-  vim.api.nvim_buf_set_lines(buf2, 0, -1, true, { line2 })
+  vim.api.nvim_buf_set_lines(buf2, 0, -1, true, lines2)
   vim.api.nvim_set_current_buf(buf2)
   vim.cmd [[diffthis]]
-end
-_H.diff_orig_smth = function()
-  local line_orig, line_smooth
-  local found_orig = false
-  local found_smooth = false
-  local section_lines = M.get_section_lines()
-  for i = 2, #section_lines do
-    if not found_orig and section_lines[i - 1]:match "^## 人工英文转写结果" then
-      line_orig = section_lines[i]
-      found_orig = true
-    end
-    if not found_smooth and section_lines[i - 1]:match "^## 人工英文顺滑结果" then
-      line_smooth = section_lines[i]
-      found_smooth = true
-    end
-  end
-  _H.diff_lines(line_orig, line_smooth, "人工英文转写结果", "人工英文顺滑结果")
 end
 
 _H.warn_invalid_sep = function(on)
@@ -376,11 +359,12 @@ M.cmd.speed = function(offset)
   vim.fn["BiteSendData"] { action = "speed", offset = offset }
 end
 
-M.cmd.diff_content = function()
-  vim.fn["BiteSendData"] { action = "fetch_content", callback = "callback_diff_content" }
+M.cmd.diff_browser = function()
+  vim.fn["BiteSendData"] { action = "fetch_content", callback = "callback_diff_browser" }
+  vim.fn["BiteSendData"] { action = "fetch_content", callback = "callback_diff_browser" }
 end
 
-_H.callback_diff_content = function(remote)
+_H.callback_diff_browser = function(remote)
   vim.cmd [[exe 'normal! <c-w>o' | topleft vsplit]]
   local buf_remote = vim.api.nvim_create_buf(true, true)
   vim.api.nvim_buf_set_name(buf_remote, "浏览器")
@@ -411,43 +395,44 @@ _H.jump_to = function(section, subsection)
   end
 end
 
-_H.create_scratch = function(lines)
-  vim.cmd([[botright split | setlocal winfixheight | resize ]] .. vim.o.cmdwinheight)
+---新建一个不可编辑的 split window，显示在界面下放，高度与 cmdwin 一致
+---@param lines string[]
+---@param sort boolean
+---@param splitcmd string
+---@return integer, integer
+_H.create_scratch = function(lines, sort, splitcmd)
+  if splitcmd == nil then splitcmd = "botright split" end
+  vim.cmd(string.format([[%s | setlocal winfixheight | resize %d]], splitcmd, vim.o.cmdwinheight))
   local bufnr = vim.api.nvim_create_buf(true, true)
+  local winnr = vim.api.nvim_get_current_win()
   vim.api.nvim_buf_set_name(bufnr, "bite://" .. tostring(bufnr))
   vim.api.nvim_set_current_buf(bufnr)
   vim.bo[bufnr].bufhidden = "wipe"
   vim.bo[bufnr].buftype = "nowrite"
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+  if sort then
+    vim.fn.win_execute(winnr, "sort n", true)
+  end
   vim.bo[bufnr].modifiable = false
-  return bufnr, vim.api.nvim_get_current_win()
+
+  return bufnr, winnr
 end
 
 local lt
 M.cmd.lint = function()
   lt = lt or require "bite.lint"
-  local ok, msg
-  local errors = {}
 
   local dict = _H.buf2dict "0"
   if dict == nil then return end
-  for section, subsection_line in pairs(dict) do
-    for subsection, line in pairs(subsection_line) do
-      repeat
-        if line:match "^%s*$" then break end
-        if lt[subsection] == nil then break end
-        ok, msg = lt[subsection](line)
-        if ok then break end
-        table.insert(errors, string.format("%s:%s:\t%s", section, subsection, msg))
-      until true
-    end
-  end
+
+  local errors = lt.lint(dict)
   if next(errors) == nil then
     vim.notify("Pass!", vim.log.levels.INFO); return
   end
 
   local origwinid = vim.api.nvim_get_current_win()
-  _H.create_scratch(errors)
+  _H.create_scratch(errors, true)
 
   local jump = function()
     local line = vim.api.nvim_get_current_line()
@@ -504,7 +489,7 @@ end
 ---3. 编辑好“人工同传中文断句结果”
 ---4. 光标移动到“人工英文顺滑结果”，执行此函数会引用“人工英文顺滑断句结果”并删除其中的sep
 ---5. 光标移动到“人工同传中文结果”，执行此函数会引用“人工同传中文断句结果”并删除其中的sep
----4、5两条可不手动操作，执行B lint时如果两个subsection为空则执行引用
+---6. 4、5两条可不手动操作，执行B lint时如果两个subsection为空则执行引用
 M.cmd.reference = function()
   local n = _H.get_curr_section_nr()
   if n == nil then return end
@@ -515,7 +500,8 @@ M.cmd.reference = function()
 
   if name == "人工英文断句结果" then
     dict[n][name] = dict[n]["人工英文转写结果"]
-    dict[n]["人工英文转写结果"] = vim.fn.substitute(dict[n]["人工英文转写结果"], "\\v【?｜】?", "", "g")
+    dict[n]["人工英文转写结果"] = vim.fn.substitute(dict[n]["人工英文转写结果"], "\\v【?｜】?", "",
+      "g")
   elseif name == "人工英文顺滑断句结果" then
     dict[n][name] = dict[n]["人工英文断句结果"]
   elseif name == "人工英文顺滑结果" then
@@ -530,6 +516,61 @@ M.cmd.reference = function()
   _H.callback_dict2buf(dict)
 end
 
+---@param dict table
+---@param subsections string[]
+---@return table
+_H.filter_dict_subsection = function(dict, subsections)
+  local ret = vim.deepcopy(dict)
+  for _, subsection_line in pairs(ret) do
+    for _subsection, _ in pairs(subsection_line) do
+      if not vim.list_contains(subsections, _subsection) then
+        subsection_line[_subsection] = nil
+      end
+    end
+  end
+  return ret
+end
+
+_H.diff_dicts = function(dict1, dict2, bufname1, bufname2)
+  ---@type string[]
+  local sections = vim.fn.sort(vim.tbl_keys(dict1), "N")
+  local lines1 = {}
+  local lines2 = {}
+  for _, section in ipairs(sections) do
+    table.insert(lines1, string.format("# %s", section))
+    for _, subsection in ipairs(vim.fn.sort(vim.tbl_keys(dict1[section]))) do
+      -- table.insert(lines1, string.format("## %s", subsection))
+      table.insert(lines1, string.format(dict1[section][subsection]))
+    end
+    table.insert(lines2, string.format("# %s", section))
+    for _, subsection in ipairs(vim.fn.sort(vim.tbl_keys(dict2[section]))) do
+      -- table.insert(lines2, string.format("## %s", subsection))
+      table.insert(lines2, string.format(dict2[section][subsection]))
+    end
+  end
+
+  _H.diff_lines(lines1, lines2, bufname1, bufname2)
+end
+
+M.cmd.diff_smooth = function()
+  local dict = _H.buf2dict "0"
+  if dict == nil then return end
+  local dict_unsmthed = _H.filter_dict_subsection(dict, { "人工英文转写结果" })
+  local dict_smthed = _H.filter_dict_subsection(dict, { "人工英文顺滑结果" })
+
+  _H.diff_dicts(dict_unsmthed, dict_smthed, "未顺滑", "顺滑")
+end
+
+M.cmd.diff_group = function()
+  local dict = _H.buf2dict "0"
+  if dict == nil then return end
+  local dict_ungrped = _H.filter_dict_subsection(dict, { "人工英文转写结果", "人工英文顺滑结果",
+    "人工同传中文结果" })
+  local dict_grped = _H.filter_dict_subsection(dict, { "人工英文断句结果", "人工英文顺滑断句结果",
+    "人工同传中文断句结果" })
+  _H.diff_dicts(dict_ungrped, dict_grped, "未断句", "断句")
+end
+
 local opt = { buffer = true, nowait = true, noremap = true }
 M.config = {
   keymaps = {
@@ -539,7 +580,7 @@ M.config = {
     { "n", "}", _H.next_subsection, opt },
     { "n", "[[", _H.prev_section, opt },
     { "n", "]]", _H.next_section, opt },
-    { "n", "<c-t>", _H.diff_orig_smth, opt },
+    { "n", "<c-t>", M.cmd.diff_smooth, opt },
     { "n", "<enter>", M.cmd.play, opt },
     { "n", "<space>", M.cmd.toggle, opt },
     { "n", "<left>", M.cmd.back, opt },
@@ -621,12 +662,12 @@ end, {
     if prefix and line:sub(-1) == " " then
       return
     end
-    return vim.tbl_filter(
-      function(key)
-        return not prefix or key:find(prefix, 1, true) == 1
-      end,
-      vim.tbl_keys(M.cmd)
-    )
+    local cmds = vim.tbl_keys(M.cmd)
+    if not prefix then
+      return cmds
+    else
+      return vim.fn.matchfuzzy(cmds, prefix)
+    end
   end,
   nargs = "*"
 })
