@@ -183,18 +183,12 @@ function play(data) {
 }
 
 function toggle() {
-  let btn = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.btns-play > svg:nth-child(3)")
-  if (btn === null) {
-    btn = document.querySelector("body > div:nth-child(10) > div.arco-modal-wrapper.arco-modal-wrapper-align-center > div > div > div > div > div > div.side-wrap_HG1nN9CV > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.btns-play > svg:nth-child(3)")
-  }
+  let btn = get_btn_toggle()
   btn.dispatchEvent(clickEvent)
 }
 
 function back(data) {
-  let btn = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.btns-play > svg:nth-child(2)")
-  if (btn === null) {
-    btn = document.querySelector("body > div:nth-child(10) > div.arco-modal-wrapper.arco-modal-wrapper-align-center > div > div > div > div > div > div.side-wrap_HG1nN9CV > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.btns-play > svg:nth-child(2)")
-  }
+  let btn = get_btn_back()
   let count = Number(data['count'])
   for (let i = 1; i <= count; i++) {
     btn.dispatchEvent(clickEvent)
@@ -212,24 +206,37 @@ function init_transcripts() {
     btn.dispatchEvent(clickEvent)
   }
   nvim_log("英文转写已初始化");
-  fetch_content();
+
+  // 通知编辑器重新 fetch_content
+  fetch('http://127.0.0.1:9001/', {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({callback: "fetch_content"})
+  }).then(function (res) {
+    console.log(res);
+  })
+
 }
 
 function get_root() {
-  let root = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(3) > div")
-  if (root === null) {
-    // 质检页面，如 https://aidp.bytedance.com/operation/task-v2/7455241299210948352/node/14/package/item/7460090930487201573?status=0&query=&page=1
-    root = document.querySelector("body > div:nth-child(10) > div.arco-modal-wrapper.arco-modal-wrapper-align-center > div > div > div > div > div > div.side-wrap_HG1nN9CV > div > div > div > div > div > div:nth-child(3) > div")
-  }
+  let root = document.querySelector(".neeko-root")?.querySelector("div:nth-child(3) > .neeko-container")
   return root
 }
 function get_wave() {
-  let wave = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave");
-  if (wave === null) {
-    // 质检页面，如 https://aidp.bytedance.com/operation/task-v2/7455241299210948352/node/14/package/item/7460090930487201573?status=0&query=&page=1
-    wave = document.querySelector("body > div:nth-child(10) > div.arco-modal-wrapper.arco-modal-wrapper-align-center > div > div > div > div > div > div.side-wrap_HG1nN9CV > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.wave-warper > div > wave")
-  }
+  let wave = document.querySelector(".neeko-root")?.querySelector("wave")
   return wave
+}
+function get_combobox() {
+  let combobox = document.querySelector("div.neeko-root")?.querySelector("div.container-speed > div[role='combobox']")
+  return combobox
+}
+function get_btn_back() {
+  let btn = document.querySelector(".neeko-root")?.querySelector("div.btns-play > svg:nth-child(2)")
+  return btn
+}
+function get_btn_toggle() {
+  let btn = document.querySelector(".neeko-root")?.querySelector("div.btns-play > svg:nth-child(3)")
+  return btn
 }
 
 function fetch_content(data) {
@@ -259,6 +266,7 @@ function fetch_content(data) {
       let text = elem.textContent.trim();
       subsection_text[subsection] = text;
     });
+    if (!subsection_text["人工英文断句结果"]) {subsection_text["人工英文断句结果"] = subsection_text["人工英文转写结果"]}
     // 2. 收集起止时间
     let region = wave.querySelector(`region[data-id="${i + 1}"`);
     let start = region.querySelector("handle.waver-handle.waver-handle-start").getBoundingClientRect().x;
@@ -305,6 +313,7 @@ function fetch_slice(data) {
   }).then(function (res) {
     console.log(res);
   })
+  nvim_log("区间边界发给编辑器")
 }
 
 function fetch_progress(data) {
@@ -355,13 +364,10 @@ function push_slice(data) {
   nvim_log(`Set section ${section} ${edge} as ${x2}`)
 }
 
+
 function speed(data) {
   let offset = Number(data["offset"])
-  let combobox = document.querySelector("#conbination-wrap > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.container-speed > div.arco-select.arco-select-single.arco-select-size-default")
-  if (combobox === null) {
-    // 质检页面
-    combobox = document.querySelector("body > div:nth-child(10) > div.arco-modal-wrapper.arco-modal-wrapper-align-center > div > div > div > div > div > div.side-wrap_HG1nN9CV > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(2) > div > div.container-operation > div.container-speed > div.arco-select.arco-select-single.arco-select-size-default")
-  }
+  combobox = get_combobox()
   let before = combobox.querySelector("span[class='arco-select-view-value']").textContent.trim()
   let after = null
 
