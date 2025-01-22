@@ -1,7 +1,5 @@
 #!/usr/bin/env lua
 
--- TODO: 检查非断句不能有sep，断句不能没有sep
-
 local _H = {}
 local M = {
   _H = _H,
@@ -45,7 +43,7 @@ end
 _H.cmn_grouped = function(s)
   local ret = _H.lint_helper(s, {
     { [[\v【?丨】?]], "sep 符号错误" },
-    { "\\v[[:blank:]]%(【?｜】?)@=", "sep 符号左边有空白字符" },
+    { "\\v[[:blank:]]%(【?｜】?)@=", "sep 符号左边有空格" },
     { "\\v^\\s*【?｜】?", "行首 sep 符号应放在上一区间行尾" },
   })
   if vim.fn.match(s, "｜") == -1 then table.insert(ret, "断句无'｜'") end
@@ -57,6 +55,7 @@ end
 _H.zh_grouped = function(s)
   return _H.lint_helper(s, {
     { "\\v%([，。？！：”’—…]【?｜】?)@<=[[:blank:]]", "中文 sep 符号右边不能有空格" },
+    { [[\v[…。!！?？]+[”"’'）)】]*\s*$]], "中文区间末句尾缺 sep" },
   })
 end
 
@@ -65,6 +64,8 @@ end
 _H.en_grouped = function(s)
   return _H.lint_helper(s, {
     { "\\v%([[:punct:][:alnum:]]【?｜】?)@<=[[:alnum:]]", "英文 sep 符号右边缺空格" },
+    { [[\v%(%(%(<al)@<!%(\u\l{,2})@<!(\.\a)@<!\.|[!?])+['’"”]?)\s*$]], "英文区间末句尾缺 sep" },
+
   })
 end
 
@@ -73,12 +74,15 @@ end
 _H.en_smoothed = function(s)
   return _H.lint_helper(s, {
     {
-      "\\v<%(ah|aha|ahem|ahh|ahhh|alas|argh|aw|aya|eeek|eek|eh|er|ew|eww|ey|gee|geez|god|gosh|ha|ha|ha|ha|ha|ha|hah|hey|hm|hmm|hmmm|hmmmm|hoo|hoorah|hooray|huh|hurrah|hurray|jah|jeez|muah|mwa|mwah|nah|no|oh|ooh|oooops|ooops|oops|ouch|ow|phew|sh|sheesh|shh|shir|shoo|ugh|uh|uh-huh|uhm|um|umm|well|whoa|whoo|wow|ya|yahoo|ye|yeah|yo|yoo|yoo-hoo|yuck|you know|ok|okay)>\\C",
+      "\\v<%(ah|aha|ahem|ahh|ahhh|alas|argh|aw|aya|eeek|eek|eh|er|ew|eww|ey|gee|geez|god|gosh|ha|ha|ha|ha|ha|ha|hah|hey|hm|hmm|hmmm|hmmmm|hoo|hoorah|hooray|huh|hurrah|hurray|jah|jeez|muah|mwa|mwah|nah|no|oh|ooh|oooops|ooops|oops|ouch|ow|phew|sh|sheesh|shh|shir|shoo|ugh|uh|uh-huh|uhm|um|umm|%(as )@<!well|whoa|whoo|wow|ya|yahoo|ye|yeah|yo|yoo|yoo-hoo|yuck|%(do )@<!you know%( it)@!|ok|okay|I mean)>\\C",
       "顺滑出现语气词" },
-    {
-      "\\v<%(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|trillion)\\C",
-      "英文数字考虑顺滑为阿拉伯数字"
-    }
+    -- {
+    --   "\\v<%(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred%(s)@!|thousand%(s)@!)\\C",
+    --   "英文数字考虑顺滑为阿拉伯数字"
+    -- },
+
+    { "\\v<%(gonna|cuz|cause)>\\C", "缩约形式应顺滑为完整形式" },
+    { "\\(\\<\\w\\+\\>\\)\\_s*\\<\\1\\>", "单词重复" },
   })
 end
 
@@ -88,7 +92,7 @@ _H.en_orig = function(s)
   return _H.lint_helper(s, {
     {
       "\\v[0-9]+",
-      "转写的数字应采用英文形式" }
+      "忠实版数字应采用英文形式" }
   })
 end
 
@@ -107,10 +111,12 @@ end
 _H.cmn_zh = function(s) -- {{{
   return _H.lint_helper(s, {
     -- 中文与数字、字母之间要有空格
-    { "\\v[^ [:alnum:][:punct:]｜【】《》，。？！：“”‘’—…][[:alnum:]]",
-      "中文右边是数字、字母时要加空格" },
-    { "\\v[[:alnum:]][^ [:alnum:][:punct:]｜【】《》，。！？：“”‘’—…]",
-      "中文左边是数字、字母时要加空格" },
+    { "\\v[^ [:alnum:][:punct:]｜【】《》，。？！、：“”‘’—…][[:alnum:]]",
+      "汉字右边是数字、字母时要加空格" },
+    { "\\v[[:alnum:]][^ [:alnum:][:punct:]｜【】《》，。？！、：“”‘’—…]",
+      "汉字左边是数字、字母时要加空格" },
+    { "[^ [:alnum:][:punct:]｜【】《》，。？！、：“”‘’—…] [^ [:alnum:][:punct:]｜【】《》，。？！、：“”‘’—…]",
+      "汉字之间无需空格" },
     -- 完整年份、月、日用阿拉伯数字，如 2015 年、1 月 1 日
     { [[\v[零一二三四五六七八九十]{4}年]],
       "完整年份须用阿拉伯数字" },
@@ -135,13 +141,6 @@ _H.cmn_zh = function(s) -- {{{
       "增补无需括号" }
   })
 end -- }}}
-
---- TODO: 区间末尾是句子边界时要有分隔符，｜或【｜】
---- TODO: 英文区间末不是句子边界时要有空格，中文区间末非句子边界时不能有空格
----@param s string
-M.check_slice_ending = function(s)
-  return s:match "[。！？”’｜】]$"
-end
 
 -- local ok, msg
 --
@@ -197,28 +196,25 @@ _H.lint = function(s, funcs)
   return ret
 end
 
----@param s string
-_H["人工英文转写结果"] = function(s)
-  return _H.lint(s, { _H.common, _H.cmn_ungrouped, _H.cmn_en, _H.en_orig })
-end
-
 _H["人工英文断句结果"] = function(s)
-  return _H.lint(s, { _H.common, _H.cmn_grouped, _H.cmn_en, _H.en_grouped, _H.en_orig })
+  return _H.lint(s, { _H.common, _H.cmn_en, _H.cmn_grouped, _H.en_grouped, _H.en_orig })
 end
-
-_H["人工同传中文结果"] = function(s)
-  return _H.lint(s, { _H.common, _H.cmn_ungrouped, _H.cmn_zh })
+_H["人工英文顺滑断句结果"] = function(s)
+  return _H.lint(s, { _H.common, _H.cmn_en, _H.cmn_grouped, _H.en_grouped, _H.en_smoothed })
 end
-
 _H["人工同传中文断句结果"] = function(s)
   return _H.lint(s, { _H.common, _H.cmn_grouped, _H.cmn_zh, _H.zh_grouped })
 end
 
-_H["人工英文顺滑结果"] = function(s)
-  return _H.lint(s, { _H.common, _H.cmn_ungrouped, _H.cmn_en, _H.en_smoothed })
+---@param s string
+_H["人工英文转写结果"] = function(s)
+  return _H.lint(s, { _H.common, _H.cmn_en, _H.cmn_ungrouped, _H.en_orig })
 end
-_H["人工英文顺滑断句结果"] = function(s)
-  return _H.lint(s, { _H.common, _H.cmn_grouped, _H.cmn_en, _H.en_grouped, _H.en_smoothed })
+_H["人工同传中文结果"] = function(s)
+  return _H.lint(s, { _H.common, _H.cmn_zh, _H.cmn_ungrouped })
+end
+_H["人工英文顺滑结果"] = function(s)
+  return _H.lint(s, { _H.common, _H.cmn_en, _H.cmn_ungrouped, _H.en_smoothed })
 end
 
 ---@return boolean, string|nil
@@ -226,7 +222,7 @@ _H.cmpr_ungrpd_grpd = function(ungrpd, grpd)
   grpd = vim.fn.substitute(grpd, "\\v【?｜】?", "", "g")
 
   if grpd ~= ungrpd then
-    return false, "断句前后文本不一致"
+    return false, "断句前后不一致"
   else
     return true, nil
   end
@@ -251,7 +247,7 @@ M.lint = function(dict)
         for _, _msg in ipairs(_H[subsection](line)) do
           table.insert(ret, string.format("%s:%s:\t%s", section, subsection, _msg))
         end
-        -- 断句前后文本需一致
+        -- 断句前后是否一致
         if subsection:match "断句" then
           ok, msg = _H.cmpr_ungrpd_grpd(subsection_line[grpd_ungrpd[subsection]], line)
           if not ok then
@@ -259,6 +255,22 @@ M.lint = function(dict)
           end
         end
       until true
+    end
+    -- 比较断句普通 sep 数量是否一致
+    local sep_orig = vim.fn.count(subsection_line["人工英文断句结果"], "｜")
+    local sep_smooth = vim.fn.count(subsection_line["人工英文顺滑断句结果"], "｜")
+    local sep_zh = vim.fn.count(subsection_line["人工同传中文断句结果"], "｜")
+    if sep_orig ~= sep_smooth or sep_smooth ~= sep_zh then
+      table.insert(ret, string.format("%s:普通sep符数量不一致：%d\t%d\t%d", section, sep_orig, sep_smooth,
+        sep_zh))
+    end
+    -- 比较断句轮换 sep 数量是否一致
+    sep_orig = vim.fn.count(subsection_line["人工英文断句结果"], "【｜】")
+    sep_smooth = vim.fn.count(subsection_line["人工英文顺滑断句结果"], "【｜】")
+    sep_zh = vim.fn.count(subsection_line["人工同传中文断句结果"], "【｜】")
+    if sep_orig ~= sep_smooth or sep_smooth ~= sep_zh then
+      table.insert(ret, string.format("%s:轮换sep符数量不一致：%d\t%d\t%d", section, sep_orig, sep_smooth,
+        sep_zh))
     end
   end
 

@@ -12,6 +12,8 @@ local M = {
   cmd = {},
 }
 
+local ut = require "bite.utils"
+
 _H.append_plain_sep = function()
   vim.api.nvim_put({ "｜" }, "c", true, true)
 end
@@ -87,8 +89,8 @@ _H.diff_lines = function(lines1, lines2, bufname1, bufname2)
   local buf1 = vim.api.nvim_create_buf(true, true)
   vim.api.nvim_buf_set_name(buf1, bufname1)
   vim.bo[buf1].bufhidden = "wipe"
-  vim.bo[buf1].buftype = "nowrite"
   vim.api.nvim_buf_set_lines(buf1, 0, -1, true, lines1)
+  vim.bo[buf1].buftype = "nowrite"
   vim.api.nvim_set_current_buf(buf1)
   vim.cmd [[diffthis]]
 
@@ -96,8 +98,8 @@ _H.diff_lines = function(lines1, lines2, bufname1, bufname2)
   local buf2 = vim.api.nvim_create_buf(true, true)
   vim.api.nvim_buf_set_name(buf2, bufname2)
   vim.bo[buf2].bufhidden = "wipe"
-  vim.bo[buf2].buftype = "nowrite"
   vim.api.nvim_buf_set_lines(buf2, 0, -1, true, lines2)
+  vim.bo[buf2].buftype = "nowrite"
   vim.api.nvim_set_current_buf(buf2)
   vim.cmd [[diffthis]]
 end
@@ -133,84 +135,11 @@ _H.store_orig_mapping = function(key, mode)
   end
 end
 
----@return string|nil
-_H.get_curr_section_nr = function()
-  local section_lineno = vim.fn.search("^# ", "cbWn")
-  if section_lineno == 0 then
-    vim.notify("Not in a section!", vim.log.levels.ERROR)
-    return
-  end
-  return vim.fn.getline(section_lineno):match "^# (%d+)"
-end
-
----@return string|nil
-_H.get_curr_subsection_name = function()
-  local subsection_lineno = vim.fn.search("^## ", "cbWn")
-  local section_lineno = vim.fn.search("^# ", "cbWn")
-  if subsection_lineno == 0 or section_lineno > subsection_lineno then
-    vim.notify("Not in a subsection!", vim.log.levels.ERROR)
-    return
-  end
-  return vim.fn.getline(subsection_lineno):match "^## (%S+)"
-end
-
----Converts the n-th section to into dict. Converts all sections if n <= 0 or n > last_section.
----@param n string|nil
-_H.buf2dict = function(n)
-  if n == nil then
-    n = _H.get_curr_section_nr()
-    if n == nil then return end
-  end
-
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local data = {}
-  local section, _section, subsection, _subsection, _key, _value
-  for _, line in ipairs(lines) do
-    repeat
-      -- skip empty lines
-      if line == "" then break end -- continue
-
-      -- [start] xxx.xxx, [end] xxx.xxx
-      _key, _value = line:match "^%[([^]]+)%]%s+(.*)$"
-      if _key ~= nil and _value ~= nil then
-        data[section][_key] = _value
-        break
-      end
-
-      -- # 1, #2, ...
-      _section = line:match "^# (%d+)"
-      if _section ~= nil then
-        section = _section
-        data[section] = {}
-        break -- continue
-      end
-
-      -- ## xxx
-      _subsection = line:match "^## (%S+)"
-      if _subsection ~= nil then
-        subsection = _subsection
-        data[section][subsection] = ""
-        break -- continue
-      end
-
-      -- content line
-      if data[section][subsection] == "" then
-        data[section][subsection] = line
-      else
-        data[section][subsection] = data[section][subsection] .. (subsection:match "英文" and " " or "") .. line
-      end
-    until true
-  end
-
-  if data[n] ~= nil then data = { [n] = data[n] } end
-  return data
-end
-
 ---Converts the n-th section to into dict. Converts all sections if n <= 0 or n > last_section.
 ---@param n string|nil
 _H.buffer2dict_slice = function(n)
   if n == nil then
-    n = _H.get_curr_section_nr()
+    n = ut.get_curr_section_nr()
     if n == nil then return end
   end
 
@@ -246,7 +175,7 @@ end
 M.cmd.start_server = vim.fn["BiteStartServer"]
 M.cmd.stop_server = vim.fn["BiteStopServer"]
 M.cmd.put = function(n)
-  local data = _H.buf2dict(n)
+  local data = ut.buf2dict(n)
   data.action = "put"
   vim.fn["BiteSendData"](data)
 end
@@ -254,7 +183,7 @@ end
 ---@param n string|nil
 M.cmd.play = function(n)
   if n == nil then
-    n = _H.get_curr_section_nr()
+    n = ut.get_curr_section_nr()
     if n == nil then return end
   end
   vim.fn["BiteSendData"] { action = "play", section = n }
@@ -281,7 +210,7 @@ end
 
 _H.push_currline_slice = function()
   local line = vim.api.nvim_get_current_line()
-  local section = _H.get_curr_section_nr()
+  local section = ut.get_curr_section_nr()
   if section == nil then return end
 
   local edge, value = line:match "^%[([^]]+)%]%s+(.*)$"
@@ -331,7 +260,7 @@ end
 
 ---@param data table
 _H.callback_receive_slice = function(data)
-  local section_subsection_line = _H.buf2dict "0"
+  local section_subsection_line = ut.buf2dict "0"
   local new = vim.tbl_deep_extend("force", section_subsection_line, data)
   _H.callback_dict2buf(new)
 end
@@ -341,7 +270,7 @@ M.cmd.fetch_progress = function()
 end
 
 _H.callback_receive_progress = function(data)
-  local n = _H.get_curr_section_nr()
+  local n = ut.get_curr_section_nr()
   if n == nil then return end
   ---@type number
   local _edge = vim.fn.confirm("Apply " .. data.x .. " to which edge?", "&Start\n&End\n&Cancel")
@@ -365,14 +294,19 @@ M.cmd.diff_browser = function()
 end
 
 _H.callback_diff_browser = function(remote)
-  vim.cmd [[exe 'normal! <c-w>o' | topleft vsplit]]
-  local buf_remote = vim.api.nvim_create_buf(true, true)
-  vim.api.nvim_buf_set_name(buf_remote, "浏览器")
-  vim.bo[buf_remote].bufhidden = "wipe"
-  vim.bo[buf_remote].buftype = "nowrite"
-  vim.api.nvim_set_current_buf(buf_remote)
-  _H.callback_dict2buf(remote, buf_remote)
-  vim.cmd [[windo diffthis]]
+  local local_ = ut.buf2dict "0"
+  if local_ == nil then return end
+
+  for _, subsection_line in pairs(remote) do
+    subsection_line["start"] = nil
+    subsection_line["end"] = nil
+  end
+  for _, subsection_line in pairs(local_) do
+    subsection_line["start"] = nil
+    subsection_line["end"] = nil
+  end
+
+  _H.diff_dicts(remote, local_, "浏览器", "编辑器")
 end
 
 _H.callback = function(data)
@@ -386,7 +320,7 @@ _H.callback = function(data)
   func(data)
 end
 
----@param section string
+---@param section string|integer
 ---@param subsection string|nil
 _H.jump_to = function(section, subsection)
   vim.fn.search(string.format("^# %s$", section), "cw")
@@ -400,8 +334,9 @@ end
 ---@param sort boolean
 ---@param splitcmd string
 ---@return integer, integer
-_H.create_scratch = function(lines, sort, splitcmd)
+_H.create_scratch = function(lines, sort, splitcmd, modifiable)
   if splitcmd == nil then splitcmd = "botright split" end
+  if modifiable == nil then modifiable = false end
   vim.cmd(string.format([[%s | setlocal winfixheight | resize %d]], splitcmd, vim.o.cmdwinheight))
   local bufnr = vim.api.nvim_create_buf(true, true)
   local winnr = vim.api.nvim_get_current_win()
@@ -414,7 +349,7 @@ _H.create_scratch = function(lines, sort, splitcmd)
   if sort then
     vim.fn.win_execute(winnr, "sort n", true)
   end
-  vim.bo[bufnr].modifiable = false
+  vim.bo[bufnr].modifiable = modifiable
 
   return bufnr, winnr
 end
@@ -423,7 +358,7 @@ local lt
 M.cmd.lint = function()
   lt = lt or require "bite.lint"
 
-  local dict = _H.buf2dict "0"
+  local dict = ut.buf2dict "0"
   if dict == nil then return end
 
   local errors = lt.lint(dict)
@@ -431,8 +366,10 @@ M.cmd.lint = function()
     vim.notify("Pass!", vim.log.levels.INFO); return
   end
 
+  if M._lintwin ~= nil then pcall(vim.api.nvim_win_close, M._lintwin, true) end
   local origwinid = vim.api.nvim_get_current_win()
-  _H.create_scratch(errors, true)
+  local _, lintwin = _H.create_scratch(errors, true, "botright split", true)
+  M._lintwin = lintwin
 
   local jump = function()
     local line = vim.api.nvim_get_current_line()
@@ -443,6 +380,22 @@ M.cmd.lint = function()
   end
 
   vim.keymap.set("n", "<enter>", jump, { silent = true, buffer = true, nowait = true, noremap = true })
+end
+
+local rp
+M.cmd.report = function()
+  rp = rp or require "bite.report"
+  local dict = ut.buf2dict "0"
+  if dict == nil then return end
+
+  local errors = rp.report(dict)
+  if next(errors) == nil then
+    vim.notify("Pass!", vim.log.levels.INFO); return
+  end
+
+  local rppath = string.format("%s.comment", vim.fn.expand "%:r")
+  vim.cmd(string.format("botright vsplit %s", rppath))
+  vim.api.nvim_buf_set_lines(0, 0, -1, false, errors)
 end
 
 M.cmd.outline = function()
@@ -462,7 +415,7 @@ M.cmd.outline = function()
   end
 
   local origwinid = vim.api.nvim_get_current_win()
-  local cursection = _H.get_curr_section_nr()
+  local cursection = ut.get_curr_section_nr()
   local bufnr, winid = _H.create_scratch(sections)
   M._outline_winid = winid
   if cursection ~= nil then vim.fn.search(string.format("^%s$", cursection)) end
@@ -491,11 +444,11 @@ end
 ---5. 光标移动到“人工同传中文结果”，执行此函数会引用“人工同传中文断句结果”并删除其中的sep
 ---6. 4、5两条可不手动操作，执行B lint时如果两个subsection为空则执行引用
 M.cmd.reference = function()
-  local n = _H.get_curr_section_nr()
+  local n = ut.get_curr_section_nr()
   if n == nil then return end
-  local name = _H.get_curr_subsection_name()
+  local name = ut.get_curr_subsection_name()
   if name == nil then return end
-  local dict = _H.buf2dict "0"
+  local dict = ut.buf2dict "0"
   if dict == nil then return end
 
   if name == "人工英文断句结果" then
@@ -517,7 +470,7 @@ M.cmd.reference = function()
 end
 
 M.cmd.ungroup = function()
-  local dict = _H.buf2dict "0"
+  local dict = ut.buf2dict "0"
   if dict == nil then return end
 
   for _, subsection_line in pairs(dict) do
@@ -571,7 +524,7 @@ _H.diff_dicts = function(dict1, dict2, bufname1, bufname2)
 end
 
 M.cmd.diff_smooth = function()
-  local dict = _H.buf2dict "0"
+  local dict = ut.buf2dict "0"
   if dict == nil then return end
   local dict_unsmthed = _H.filter_dict_subsection(dict, { "人工英文转写结果" })
   local dict_smthed = _H.filter_dict_subsection(dict, { "人工英文顺滑结果" })
@@ -580,7 +533,7 @@ M.cmd.diff_smooth = function()
 end
 
 M.cmd.diff_group = function()
-  local dict = _H.buf2dict "0"
+  local dict = ut.buf2dict "0"
   if dict == nil then return end
   local dict_ungrped = _H.filter_dict_subsection(dict, { "人工英文转写结果", "人工英文顺滑结果",
     "人工同传中文结果" })
@@ -595,6 +548,37 @@ M.cmd.diff_group = function()
   _H.diff_dicts(dict_ungrped, dict_grped, "未断句", "断句")
 end
 
+M.cmd.navdown = function()
+  local section = ut.get_curr_section_nr()
+  if section == nil then return end
+  local subsection = ut.get_curr_subsection_name()
+  if subsection == nil then return end
+
+  section = tonumber(section) + 1
+  _H.jump_to(section, subsection)
+  vim.cmd [[normal! }j]]
+end
+
+M.cmd.navup = function()
+  local section = ut.get_curr_section_nr()
+  if section == nil then return end
+  local subsection = ut.get_curr_subsection_name()
+  if subsection == nil then return end
+
+  section = tonumber(section) - 1
+  _H.jump_to(section, subsection)
+  vim.cmd [[normal! }j]]
+end
+
+---给光标行每个句末添加 sep 符号。只会添加普通 sep 符，需说话人轮换 sep 时需手动调整
+M.cmd.sep = function()
+  -- English sentence endings
+  local re_en = [[\v%(%(%(<al)@<!%(\u\l{,2})@<!(\.\a)@<!\.|[!?])+['’"”]?)\zs%(｜|【)@!]]
+  -- Chinese sentence endings
+  local re_zh = [[\v[…。!！?？]+[”"’'）)】]*\zs%(｜|【)@!]]
+  vim.cmd(string.format("s/%s/｜/ge | s/%s/｜/ge", re_en, re_zh))
+end
+
 local opt = { buffer = true, nowait = true, noremap = true }
 M.config = {
   keymaps = {
@@ -604,11 +588,12 @@ M.config = {
     { "n", "}", _H.next_subsection, opt },
     { "n", "[[", _H.prev_section, opt },
     { "n", "]]", _H.next_section, opt },
+    { "n", "[e", M.cmd.navup, opt },
+    { "n", "]e", M.cmd.navdown, opt },
     { "n", "<c-t>", M.cmd.diff_smooth, opt },
     { "n", "<enter>", M.cmd.play, opt },
     { "n", "<space>", M.cmd.toggle, opt },
     { "n", "<left>", M.cmd.back, opt },
-    { "n", "gI", M.cmd.init_transcripts, opt },
     { "n", "<c-s-h>", vim.fn["BiteToggleServer"], opt },
     { "n", "<s-enter>", _H.push_currline_slice, opt },
     { "n", "<leader><enter>", M.cmd.fetch_slice, opt },
@@ -618,6 +603,7 @@ M.config = {
     { "n", "]b", function() vim.fn.search [[【\?｜】\?]] end, opt },
     { "n", "gO", M.cmd.outline, opt },
     { "n", "gp", M.cmd.reference, opt },
+    { "n", "gI", M.cmd.lint, opt },
   }
 }
 
@@ -664,6 +650,16 @@ M.cmd.disable_keybindings = function()
   M._orig_mappings = {}
 
   _H.warn_invalid_sep(false)
+end
+
+M.cmd.reload = function()
+  local pkg_name = "bite"
+  for k, _ in pairs(package.loaded) do
+    if k:sub(1, #pkg_name) == pkg_name then package.loaded[k] = nil end
+  end
+  vim.api.nvim_del_user_command("B")
+  require(pkg_name)
+  vim.print(pkg_name .. " reloaded at " .. os.date "%H:%M:%S")
 end
 
 vim.api.nvim_create_user_command("B", function(a)

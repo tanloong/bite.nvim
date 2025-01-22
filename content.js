@@ -125,7 +125,7 @@ document.addEventListener('keydown', function (event) {
   }
 });
 
-const inputEvent = new Event('input', {
+const changeEvent = new Event('change', {
   bubbles: true,    // 事件是否冒泡
   cancelable: true  // 事件是否可以取消
 });
@@ -153,7 +153,7 @@ function editor2browser(data) {
           if (typeof elem == 'undefined' || elem == null) {return;}
           elem.value = data[label][subsection];
           // 触发输入事件，模拟手输
-          elem.dispatchEvent(inputEvent);
+          elem.dispatchEvent(changeEvent);
         }
       });
     }
@@ -269,10 +269,15 @@ function fetch_content(data) {
     if (!subsection_text["人工英文断句结果"]) {subsection_text["人工英文断句结果"] = subsection_text["人工英文转写结果"]}
     // 2. 收集起止时间
     let region = wave.querySelector(`region[data-id="${i + 1}"`);
-    let start = region.querySelector("handle.waver-handle.waver-handle-start").getBoundingClientRect().x;
-    let end = region.querySelector("handle.waver-handle.waver-handle-end").getBoundingClientRect().x;
-    subsection_text['start'] = start;
-    subsection_text['end'] = end;
+    if (region === null) {
+      subsection_text['start'] = "nil";
+      subsection_text['end'] = "nil";
+    } else {
+      let start = region.querySelector("handle.waver-handle.waver-handle-start").getBoundingClientRect().x;
+      let end = region.querySelector("handle.waver-handle.waver-handle-end").getBoundingClientRect().x;
+      subsection_text['start'] = start;
+      subsection_text['end'] = end;
+    }
     // 3. 保存到 data
     ret[label] = subsection_text
   }
@@ -313,11 +318,10 @@ function fetch_slice(data) {
   }).then(function (res) {
     console.log(res);
   })
-  nvim_log("区间边界发给编辑器")
 }
 
 function fetch_progress(data) {
-  let wave = get_wave()
+  let wave = get_wave()?.querySelector("wave")
   let x = String(wave.getBoundingClientRect().right);
   let ret = {x: x, callback: data["callback"]}
   fetch('http://127.0.0.1:9001/fetch_progress', {
@@ -372,13 +376,11 @@ function speed(data) {
   let after = null
 
   // 点开下拉菜单
-  let popup = document.querySelector("#arco-select-popup-0 > div > div")
+  let popup = document.querySelector(".arco-trigger > .arco-select-popup")
   if (popup === null) {
     combobox.dispatchEvent(clickEvent);
-    popup = document.querySelector("#arco-select-popup-0 > div > div")
+    popup = document.querySelector(".arco-trigger > .arco-select-popup")
   }
-  // 质检页面
-  if (popup === null) {popup = document.querySelector("#arco-select-popup-4 > div > div")}
   if (popup === null) {nvim_log("倍速失败，找不到下拉菜单", "ERROR"); return };
 
   let choices = popup.querySelectorAll("li")
@@ -398,9 +400,7 @@ function speed(data) {
   nvim_log(li.textContent.trim())
 
   // 若下拉菜单未关闭，将其关闭
-  popup = document.querySelector("#arco-select-popup-0 > div > div")
-  if (popup !== null) {combobox.dispatchEvent(clickEvent);};
-  popup = document.querySelector("#arco-select-popup-4 > div > div")
+  popup = document.querySelector(".arco-trigger > .arco-select-popup")
   if (popup !== null) {combobox.dispatchEvent(clickEvent);};
 }
 
