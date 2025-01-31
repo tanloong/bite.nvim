@@ -9,14 +9,12 @@
     "scripting"
   ],
   "host_permissions": [
-    "file:///*.html",
-    "https://aidp.bytedance.com/operation/task-v2/*"
+    "https://aidp.bytedance.com/operation/task-v2*"
   ],
   "content_scripts": [
     {
       "matches": [
-        "https://aidp.bytedance.com/operation/task-v2/*",
-        "file:///*.html"
+        "https://aidp.bytedance.com/operation/task-v2*"
       ],
       "js": [
         "content.js"

@@ -88,7 +88,7 @@ _H.en_smoothed = function(s)
     --   "\\v<%(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred%(s)@!|thousand%(s)@!)\\C",
     --   "英文数字考虑顺滑为阿拉伯数字"
     -- },
-    { "\\v\\S+\\s+<%(gonna|cuz|cause)>\\s*\\S+\\C", "缩约形式未展开" },
+    { "\\v<%(gonna|cuz|cause)>\\C", "缩约形式未展开" },
     { "\\(\\<\\w\\+\\>\\)\\_s*\\<\\1\\>", "连续重复词需去重" },
   })
 end
@@ -256,7 +256,7 @@ M.report = function(d)
 
     if next(ret_section) ~= nil then
       heading_section = string.format("# 第 %d 小条", section)
-      if #ret_section >= 3 then
+      if #vim.tbl_filter(function(s) return not s:match "^## " end, ret_section) >= 3 then
         heading_section = string.format("%s (规则失误大于3个，不合格)", heading_section)
       end
       table.insert(ret, heading_section)
